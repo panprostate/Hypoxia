@@ -1,0 +1,2209 @@
+---
+title: "Manuscript Dec 2024, Figure 1. RNA data release 1.4k10prerelease"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+Analysis for figure 1 in Hypoxia manuscript December 2024.
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(circlize)
+library(ComplexHeatmap)
+library(data.table)
+library(ggplot2)
+library(ggsci)
+library(ggsignif)
+library(ggthemes)
+library(gridExtra)
+library(RColorBrewer)
+library(scales)
+library(xtable)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+Heatmap parameters
+```{r}
+ht_opt$heatmap_row_names_gp = gpar(fontsize = 12)
+```
+
+# Data
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               drivers = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__allGenes.txt",
+               evofeatures = "/mnt/bmh01-rds/UoOxford_David_W/shared/ICGC_UK_RNA/ppcg_subtyping_weagles_nadiah_15112021.csv",
+               rel_cna = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/CNA_ANNOTATIONS__2023-09-13_release4/relative_cna_table_by_gene_pam.tsv",
+               total_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_coefficient_tables_k10_rearranged_20241204.RData",
+               nonzero_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_20241204.RData")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+```{r}
+hypoxia_colours_q <- list("Q1" = "#14556e",
+                          "Q2" = "#67889a",
+                          "Q3" = "#c06842",
+                          "Q4" = "#9c2f15")
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## Combined data
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+## Driver data
+Data release version: 4
+
+Date: 2023-09-25
+
+Source: Juri Reimand - FTP box
+
+/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__allGenes.txt
+```{r}
+driver_data <- read.delim(params$drivers, row.names = 1, sep = "\t", header = TRUE)
+```
+
+## Relative CN in GISTIC peaks
+Data release version: 4
+
+Date: 2023-09-13
+
+Source: Juri Reimand - FTP box
+
+/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/Driver_annotations_2023-01-18/DRIVER_ANNOTATIONS__2023-01-18_release2__SNV+indel__filteredVariants__driverGenes.txt
+```{r}
+rel_cna <- read.delim(params$rel_cna, sep = "\t", header = TRUE)
+```
+
+
+## Other data
+### Gene lists
+
+```{r}
+drg_genes_36 <- c("ATM","BAP1","BLM","BRCA1","BRCA2",
+               "BRIP1","CDH1","CDK4","CDKN2A","CHEK2",
+               "FANCA","FANCD2","FANCI","FANCL","FANCM",
+               "MLH1","MSH2","MSH6","NBN","NTHL1",
+               "PALB2","PMS2","POLD1","POLE","POT1",
+               "PTCH1","PTEN","RAD51C","RAD51D","RB1",
+               "SMAD4","SMARCA4","STK11","TP53","XPA",
+               "XPC")
+```
+
+```{r}
+drg_genes_128 <- c("AKT1","ALKBH3","APEX1","APLF","ATM",
+                   "ATR","ATRIP","BAP1","BARD1","BLM",
+                   "BRCA1","BRCA2","BRIP1","CCNH","CDC25A",
+                   "CDC25C","CDH1","CDK1","CDK2","CDK4",
+                   "CDKN2A","CHEK1","CHEK2","CLK2","DCLRE1A",
+                   "DDB1","EME1","EME2","EPCAM","ERCC2",
+                   "ERCC3","ERCC5","ERCC6","ESR2","EXO1",
+                   "FAM175A","FANCA","FANCD2","FANCI","FANCL",
+                   "FANCM","GADD45A","GEN1","GTF2H2","GTF2H3",
+                   "GTF2H4","H2AFX","HUS1","LIG1","LIG3",
+                   "LIG4","MLH1","MLH3","MMS19","MNAT1",
+                   "MPG","MRE11","MRE11A","MSH2","MSH3",
+                   "MSH5","MSH6","MSR1","NABP2","NBN",
+                   "NEIL1","NEIL2","NHEJ1","NTHL1","OGG1",
+                   "PALB2","PARP2","PER1","PER2","PMS1",
+                   "PMS2","PNKP","POLD1","POLE","POLH",
+                   "POLK","POLL","POLM","POLN","POLQ",
+                   "POT1","PRSS1","PTCH1","PTEN","RAD1",
+                   "RAD50","RAD51","RAD51B","RAD51C","RAD51D",
+                   "RAD52","RAD54B","RAD54L","RB1","RDM1",
+                   "RECQL","RECQL4","RECQL5","RINT1","RNF8",
+                   "RPA1","RPA3","SETMAR","SLX4","SMAD4",
+                   "SMARCA4","SMUG1","STK11","TDG","TDP1",
+                   "TOP2A","TOP2B","TOP3A","TP53","TP53BP1",
+                   "WRN","XAB2","XPA","XPC","XRCC1",
+                   "XRCC2","XRCC4","XRCC5")
+```
+
+### Robustlmm coefficients 
+```{r}
+load(params$total_model_coefs)
+```
+
+```{r}
+load(params$nonzero_model_coefs)
+```
+
+### IDC group renaming 
+```{r}
+combined_data$Cribriform_Intraductal_Y_N[combined_data$Cribriform_Intraductal_Y_N == "Y"] <- "IDC"
+combined_data$Cribriform_Intraductal_Y_N[combined_data$Cribriform_Intraductal_Y_N == "N"] <- "No IDC"
+combined_data$Cribriform_Intraductal_Y_N <- as.factor(combined_data$Cribriform_Intraductal_Y_N)
+combined_data$Cribriform_Intraductal_Y_N <- factor(combined_data$Cribriform_Intraductal_Y_N, levels = c("No IDC","IDC"))
+```
+
+
+# Merge data and select samples
+Use Tier 1 Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+Select only tumour samples. Then only one sample per individual donor. 
+
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+summary(hypoxia_signatures_tum_data_single)
+```
+
+## Tidy data levels and labels
+
+```{r}
+hypoxia_signatures_tum_data_single$gleason_total <- as.factor(hypoxia_signatures_tum_data_single$gleason_total)
+hypoxia_signatures_tum_data_single$gleason_total <- factor(hypoxia_signatures_tum_data_single$gleason_total, levels = c("3+3","3+4","4+3","4+4","3+5","4+5","5+4","5+5"))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single$psa_bracket <- as.factor(hypoxia_signatures_tum_data_single$psa_bracket)
+hypoxia_signatures_tum_data_single$psa_bracket <- factor(hypoxia_signatures_tum_data_single$psa_bracket, levels = c("0-9.9","10-19.9","≥20"))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single$age_bracket <- as.factor(hypoxia_signatures_tum_data_single$age_bracket)
+hypoxia_signatures_tum_data_single$age_bracket <- factor(hypoxia_signatures_tum_data_single$age_bracket, levels = c("< 40","40-50","50-65","65-70","≥ 70"))
+```
+
+Here is a list of the IDs that were used for the single tumour sample per patient analysis:
+```{r}
+hypoxia_signatures_tum_data_single$PPCG_SampleID
+```
+
+## CN signature numbers
+```{r}
+cna_colnames <- c("CX1",  "CX2",  "CX3",  "CX4",  "CX5",  "CX7",  "CX8",  "CX11")
+cna_colnames_counts <- paste0(cna_colnames,"_numbers")
+```
+
+### Multiply CNA signature proportions by number of CNAs
+```{r}
+hypoxia_signatures_tum_data_single[,cna_colnames_counts] <- hypoxia_signatures_tum_data_single[,cna_colnames]*hypoxia_signatures_tum_data_single$num_cnvs
+```
+
+# Clinical data associations table
+
+```{r}
+hypoxia_isup <- ggplot(subset(hypoxia_signatures_tum_data_single, !is.na(ISUP_Grade)), aes(x = as.factor(ISUP_Grade), y = Buffa_signature_Sum_within))+
+  geom_jitter(width = 0.3, alpha = 0.3, aes(colour = as.factor(ISUP_Grade)), height = 0)+
+  geom_boxplot(alpha = 0.5, outlier.colour = NA)+ # no outlier plotting because we have geom_jitter to plot the points
+  theme_light()+
+  scale_colour_manual(values = PPCG_colourlist$ISUP_colourlist)+
+  xlab("Gleason Grade Group")+
+  ylab("Hypoxia Score")+
+  # ggtitle("ISUP Grade")+
+  # geom_signif(map_signif_level = TRUE, tip_length = 0, comparisons = list(c("1","2"),
+  #                                                                         c("2","3"),
+  #                                                                         c("3","4"),
+  #                                                                         c("4","5")))+
+  theme(text = element_text(size = 16), legend.position = "none")
+
+# hypoxia_survival
+hypoxia_isup
+```
+```{r}
+summary(hypoxia_signatures_tum_data_single$ISUP_Grade)
+length(hypoxia_signatures_tum_data_single$ISUP_Grade)
+```
+
+```{r}
+kruskal.test(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+             hypoxia_signatures_tum_data_single$ISUP_Grade)
+```
+
+```{r}
+wilcox_isup_grade_stats <- as.data.frame(matrix(nrow = 10, ncol = 6))
+colnames(wilcox_isup_grade_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted")
+wilcox_isup_grade_stats$Status_1 <- c(rep("1",4),rep("2",3),rep("3",2),"4")
+wilcox_isup_grade_stats$Status_2 <- c("2","3","4","5",
+                                      "3","4","5",
+                                      "4","5",
+                                      "5")
+
+for(i in 1:nrow(wilcox_isup_grade_stats)){
+  
+  wilcox_isup_grade_stats$n_Status_1[i] <- nrow(subset(hypoxia_signatures_tum_data_single, ISUP_Grade == wilcox_isup_grade_stats$Status_1[i]))
+  wilcox_isup_grade_stats$n_Status_2[i] <- nrow(subset(hypoxia_signatures_tum_data_single, ISUP_Grade == wilcox_isup_grade_stats$Status_2[i]))
+  
+  wilcox_isup_grade_stats$wilcox_p[i] <- wilcox.test(subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within)[[3]]
+}
+
+wilcox_isup_grade_stats$wilcox_p_adjusted <- p.adjust(wilcox_isup_grade_stats$wilcox_p, method = "BH")
+```
+
+```{r}
+wilcox_isup_grade_stats
+```
+
+```{r}
+hypoxia_age <- ggplot(hypoxia_signatures_tum_data_single, aes(x = age_at_tumour_collection, y = Buffa_signature_Sum_within))+
+  geom_point(alpha = 0.5)+ # no outlier plotting because we have geom_jitter to plot the points
+  geom_smooth(method = "lm")+
+  theme_light()+
+  xlab("Age at tumour collection")+
+  ylab("Hypoxia Score")+
+  ggtitle("Age")+
+  theme(plot.title = element_text(hjust = 0.5))
+hypoxia_age
+```
+```{r}
+cor.test(hypoxia_signatures_tum_data_single$age_at_tumour_collection,
+         hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+         method = "spearman")
+```
+```{r}
+summary(hypoxia_signatures_tum_data_single$age_at_tumour_collection)
+length(hypoxia_signatures_tum_data_single$age_at_tumour_collection)
+```
+
+```{r}
+hypoxia_psa <- ggplot(hypoxia_signatures_tum_data_single, aes(x = psa_at_tumour_collection, y = Buffa_signature_Sum_within))+
+  geom_point(alpha = 0.5)+ 
+  geom_smooth(method = "lm")+
+  theme_light()+
+  xlab("PSA at tumour collection")+
+  ylab("Hypoxia Score")+
+  ggtitle("PSA")+
+  scale_x_log10()+
+  theme(plot.title = element_text(hjust = 0.5))
+hypoxia_psa
+```
+```{r}
+cor.test(hypoxia_signatures_tum_data_single$psa_at_tumour_collection,
+         hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+         method = "spearman")
+```
+```{r}
+summary(hypoxia_signatures_tum_data_single$psa_at_tumour_collection)
+length(hypoxia_signatures_tum_data_single$psa_at_tumour_collection)
+```
+
+```{r}
+hypoxia_isup_cor <- ggplot(hypoxia_signatures_tum_data_single, aes(x = ISUP_Grade, y = Buffa_signature_Sum_within))+
+  geom_point(alpha = 0.5)+ 
+  geom_smooth(method = "lm")+
+  theme_light()+
+  xlab("Gleason Grade Group")+
+  ylab("Hypoxia Score")+
+  # ggtitle("ISUP Grade")+
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")+
+  scale_colour_manual(values = PPCG_colourlist$ISUP_colourlist)
+```
+
+
+## IDC
+```{r}
+IDC_box <- ggplot(subset(hypoxia_signatures_tum_data_single, !is.na(Cribriform_Intraductal_Y_N)), 
+                  aes(x = Cribriform_Intraductal_Y_N, y = Buffa_signature_Sum_within))+
+  geom_jitter(alpha = 0.5, height = 0, aes(colour = Cribriform_Intraductal_Y_N))+
+  geom_boxplot(alpha = 0.5, outlier.colour = NA)+ 
+  theme_light()+
+  xlab("IDC")+
+  ylab("Hypoxia Score (Buffa Sum)")+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("No IDC","IDC")),
+              test = "wilcox.test", tip_length = 0, y_position = c(35))+
+  scale_colour_manual(name = "IDC Presence", values = c("grey","tomato3"))+
+  theme(text = element_text(size = 16),
+        legend.position = "bottom")
+IDC_box
+```
+
+```{r}
+IDC_bar <- ggplot(subset(hypoxia_signatures_tum_data_single, !is.na(Cribriform_Intraductal_Y_N)), aes(fill = Cribriform_Intraductal_Y_N, x = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_bar(stat = "count", position = "fill")+ 
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+              stat="count", position=position_fill(0.5), vjust=0.5, colour = "white")+
+  theme_light()+
+  xlab("Hypoxia Score Quartile")+
+  ylab("IDC")+
+  scale_fill_manual(name = "IDC Presence", values = c("grey","tomato3"))+
+  theme(text = element_text(size = 16),
+        legend.position = "bottom")
+IDC_bar
+```
+
+```{r}
+wilcox.test(subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "IDC")$Buffa_signature_Sum_within,
+            subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "No IDC")$Buffa_signature_Sum_within)
+```
+
+## Output table
+```{r}
+patient_stat_table <- as.data.frame(matrix(nrow = 4, ncol = 5, data = NA))
+colnames(patient_stat_table) <- c("Comparison","Test","n","p_val","Further_info")
+patient_stat_table$Comparison <- c("Hypoxia by GG","Hypoxia vs Age","Hypoxia vs PSA","Hypoxia by IDC status")
+patient_stat_table$Test <- c("Kruskal-Wallis Rank Sum Test", "Spearman Correlation","Spearman Correlation","Wilcoxon Rank Sum Test")
+
+patient_stat_table$n <- c(sum(!is.na(hypoxia_signatures_tum_data_single$ISUP_Grade)),
+                          sum(!is.na(hypoxia_signatures_tum_data_single$age_at_tumour_collection)),
+                          sum(!is.na(hypoxia_signatures_tum_data_single$psa_at_tumour_collection)),
+                          sum(!is.na(hypoxia_signatures_tum_data_single$Cribriform_Intraductal_Y_N)))
+
+patient_stat_table$p_val <- c(kruskal.test(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                           hypoxia_signatures_tum_data_single$ISUP_Grade)$p.value,
+                              cor.test(hypoxia_signatures_tum_data_single$age_at_tumour_collection,
+                                       hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                       method = "spearman")$p.value,
+                              cor.test(hypoxia_signatures_tum_data_single$psa_at_tumour_collection,
+                                       hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                       method = "spearman")$p.value,
+                              wilcox.test(subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "IDC")$Buffa_signature_Sum_within,
+                                          subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "No IDC")$Buffa_signature_Sum_within)$p.value)
+patient_stat_table$Further_info <- c("",
+                                     paste0("Spearman $\\rho$ = ",round(cor.test(hypoxia_signatures_tum_data_single$age_at_tumour_collection,
+                                       hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                       method = "spearman")$estimate[[1]], digits = 3)),
+                                     paste0("Spearman $\\rho$ = ",round(cor.test(hypoxia_signatures_tum_data_single$psa_at_tumour_collection,
+                                       hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                       method = "spearman")$estimate[[1]], digits = 3)),
+                                     paste0("Median Hypoxia Score: IDC = ",
+                                            round(median(subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "IDC")$Buffa_signature_Sum_within),digits = 3),
+                                            "; No IDC = ",
+                                            round(median(subset(hypoxia_signatures_tum_data_single, Cribriform_Intraductal_Y_N == "No IDC")$Buffa_signature_Sum_within), digits = 3)))
+```
+
+Print latex style table
+```{r}
+xtable(patient_stat_table,
+       display = c("s","s","s","d","e","s"))
+```
+
+
+# Drivers
+
+Preparing analysis and plotting of driver data as a heatmap/oncoprint. 
+
+```{r}
+driver_mat <- as.matrix(subset(driver_data, gene_source != "."))
+driver_mat = driver_mat[, -c(1,2)]
+driver_mat <- gsub("\\.","", driver_mat)
+```
+
+Reorder signatures for oncoprint.  Only plot samples for which we have data from WGS/drivers. 
+```{r}
+hypoxia_op <- subset(hypoxia_signatures_tum_data_single, !is.na(WGS_AssayID) &
+                       WGS_AssayID %!in% c("ADD",""))
+
+rownames(hypoxia_op) <- hypoxia_op$WGS_AssayID
+
+# order data by hypoxia scores
+# hypoxia_op <- hypoxia_op[rownames(hypoxia_op) %in% colnames(driver_mat),]
+hypoxia_op <- hypoxia_op[order(hypoxia_op$Buffa_signature_Sum_within, decreasing = FALSE),]
+
+# order driver samples by hypoxia scores
+driver_mat <- driver_mat[,rownames(hypoxia_op)[rownames(hypoxia_op) %in% colnames(driver_mat)]]
+
+```
+
+```{r}
+driver_mat[driver_mat == "nsSNV"] <- "Mutation"
+driver_mat[driver_mat == "splicing"] <- "Mutation"
+driver_mat[driver_mat == "stopgain"] <- "Mutation"
+driver_mat[driver_mat == "stoploss"] <- "Mutation"
+driver_mat[driver_mat == "startloss"] <- "Mutation"
+driver_mat[driver_mat == "stopgain+nsSNV"] <- "Mutation"
+driver_mat[driver_mat == "nsSNV+splicing"] <- "Mutation"
+driver_mat[driver_mat == "nsSNV+stopgain"] <- "Mutation"
+driver_mat[driver_mat == "splicing+nsSNV"] <- "Mutation"
+
+driver_mat[driver_mat == ""] <- "No Mutation"
+```
+
+Test for differences in scores
+```{r}
+driver_hypoxia_scores <- as.data.frame(matrix(nrow = nrow(driver_mat), ncol = 5))
+colnames(driver_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+driver_hypoxia_scores$Gene <- rownames(driver_mat)
+
+for(i in 1:nrow(driver_hypoxia_scores)){
+  gene <- driver_hypoxia_scores$Gene[i]
+  test_gene <- as.data.frame(t(driver_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  
+  table_data <- as.data.frame(table(test_data$Test_gene))
+  if(nrow(table_data) > 1){
+    driver_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "Mutation")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+  
+    driver_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "Mutation"))
+    driver_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "No Mutation"))
+  }
+  
+}
+
+driver_hypoxia_scores$wilcox_p_adj <- p.adjust(driver_hypoxia_scores$wilcox_p_val, method = "BH")
+```
+
+```{r}
+driver_hypoxia_scores$Significance <- ifelse(driver_hypoxia_scores$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(driver_hypoxia_scores) <- driver_hypoxia_scores$Gene
+```
+
+Order data by p-value
+```{r}
+driver_hypoxia_scores <- driver_hypoxia_scores[order(driver_hypoxia_scores$wilcox_p_val),]
+rownames(driver_hypoxia_scores) <- driver_hypoxia_scores$Gene
+```
+```{r}
+head(driver_hypoxia_scores)
+```
+
+## Q1 Q4 difference
+```{r}
+driver_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = nrow(driver_mat), ncol = 8))
+colnames(driver_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+driver_hypoxia_enrichment_quart$Gene <- rownames(driver_mat)
+
+for(i in 1:nrow(driver_hypoxia_enrichment_quart)){
+  gene <- driver_hypoxia_enrichment_quart$Gene[i]
+  test_gene <- as.data.frame(t(driver_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within_quartile_one_sample_per_donor","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  test_data <- subset(test_data, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+  
+  table_data <- as.data.frame(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+  if(nrow(table_data) > 2){
+    driver_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+    driver_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[3]]
+  
+  
+  
+    driver_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q4"))[,"Freq"]
+    driver_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q1"))[,"Freq"]
+    driver_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q4"))[,"Freq"]
+    driver_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q1"))[,"Freq"]
+  }
+  
+}
+
+driver_hypoxia_enrichment_quart$fisher_p_adj <- p.adjust(driver_hypoxia_enrichment_quart$fisher_p_val, method = "BH")
+```
+
+```{r}
+subset(driver_hypoxia_enrichment_quart, fisher_p_adj < 0.05)
+```
+
+```{r}
+driver_hypoxia_enrichment_quart$Significance <- ifelse(driver_hypoxia_enrichment_quart$fisher_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(driver_hypoxia_enrichment_quart) <- driver_hypoxia_enrichment_quart$Gene
+```
+
+Order data by p-value
+```{r}
+driver_hypoxia_enrichment_quart <- driver_hypoxia_enrichment_quart[order(driver_hypoxia_enrichment_quart$fisher_p_val),]
+rownames(driver_hypoxia_enrichment_quart) <- driver_hypoxia_enrichment_quart$Gene
+```
+```{r}
+head(driver_hypoxia_enrichment_quart)
+```
+
+Select 10 genes to plot
+```{r}
+driver_top10_genes <- driver_hypoxia_enrichment_quart$Gene[1:10]
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+driver_mat_bin <- driver_mat
+driver_mat_bin[driver_mat_bin == "Mutation"] <- as.numeric(1)
+driver_mat_bin[driver_mat_bin == "No Mutation"] <- as.numeric(0)
+```
+
+```{r}
+class(driver_mat_bin) <- "numeric"
+```
+
+```{r}
+summary_somatic_driver <- as.data.frame(colSums(driver_mat_bin))
+colnames(summary_somatic_driver) <- c("Muts_in_driver")
+summary_somatic_driver$WGS_AssayID <- rownames(summary_somatic_driver)
+summary_somatic_driver$bin_muts_in_driver <- ifelse(summary_somatic_driver$Muts_in_driver == 0, yes = "No Mutation", no = "Mutation")
+```
+
+```{r}
+summary_somatic_driver <- merge(summary_somatic_driver, 
+                               hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID",
+                                             "Buffa_signature_Sum_within_bin_one_sample_per_donor",
+                                             "Buffa_signature_Sum_within_quartile_one_sample_per_donor")],
+                               by = "WGS_AssayID")
+```
+
+```{r}
+wilcox.test(subset(summary_somatic_driver, bin_muts_in_driver == "Mutation")[,"Buffa_signature_Sum_within"], 
+            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"])
+```
+
+```{r}
+summary_somatic_driver_q1q4 <- subset(summary_somatic_driver, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+```
+
+```{r}
+fisher.test(table(summary_somatic_driver_q1q4$bin_muts_in_driver, summary_somatic_driver_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+```{r}
+table(summary_somatic_driver_q1q4$bin_muts_in_driver, 
+      summary_somatic_driver_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor)
+```
+
+```{r}
+wilcox.test(subset(summary_somatic_driver, bin_muts_in_driver == "Mutation")[,"Buffa_signature_Sum_within"], 
+            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"])
+```
+
+# DRG 36 Somatic
+DRG genes with somatic mutations identified by both callers or a tier 1 indel (filtered data)
+```{r}
+drg_genes_36[drg_genes_36 %in% rownames(driver_data)]
+```
+
+DRG genes that do not have somatic mutations identified by both callers or a tier 1 indel (filtered data)
+```{r}
+drg_genes_36[drg_genes_36 %!in% rownames(driver_data)]
+```
+
+```{r}
+drg36_mat <- as.matrix(driver_data[rownames(driver_data) %in% drg_genes_36,])
+drg36_mat = drg36_mat[, -c(1,2)]
+drg36_mat <- gsub("\\.","", drg36_mat)
+```
+Reorder signatures for oncoprint.  Only plot samples for which we have data from WGS/drivers. 
+```{r}
+# order driver samples by hypoxia scores
+drg36_mat <- drg36_mat[,rownames(hypoxia_op)[rownames(hypoxia_op) %in% colnames(drg36_mat)]]
+
+```
+
+```{r}
+drg36_mat[drg36_mat == "nsSNV"] <- "Mutation"
+drg36_mat[drg36_mat == "splicing"] <- "Mutation"
+drg36_mat[drg36_mat == "stopgain"] <- "Mutation"
+drg36_mat[drg36_mat == "stoploss"] <- "Mutation"
+drg36_mat[drg36_mat == "startloss"] <- "Mutation"
+drg36_mat[drg36_mat == "stopgain+nsSNV"] <- "Mutation"
+drg36_mat[drg36_mat == "nsSNV+splicing"] <- "Mutation"
+drg36_mat[drg36_mat == "nsSNV+stopgain"] <- "Mutation"
+drg36_mat[drg36_mat == "splicing+nsSNV"] <- "Mutation"
+
+drg36_mat[drg36_mat == ""] <- "No Mutation"
+```
+
+## Test for differences in scores
+```{r}
+drg36_hypoxia_scores <- as.data.frame(matrix(nrow = nrow(drg36_mat), ncol = 5))
+colnames(drg36_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+drg36_hypoxia_scores$Gene <- rownames(drg36_mat)
+
+for(i in 1:nrow(drg36_hypoxia_scores)){
+  gene <- drg36_hypoxia_scores$Gene[i]
+  test_gene <- as.data.frame(t(drg36_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  
+  table_data <- as.data.frame(table(test_data$Test_gene))
+  if(nrow(table_data) > 1){
+    drg36_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "Mutation")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+  
+    drg36_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "Mutation"))
+    drg36_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "No Mutation"))
+  }
+  
+}
+
+drg36_hypoxia_scores$wilcox_p_adj <- p.adjust(drg36_hypoxia_scores$wilcox_p_val, method = "BH")
+```
+
+```{r}
+drg36_hypoxia_scores$Significance <- ifelse(drg36_hypoxia_scores$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(drg36_hypoxia_scores) <- drg36_hypoxia_scores$Gene
+```
+
+Order data by p-value
+```{r}
+drg36_hypoxia_scores <- drg36_hypoxia_scores[order(drg36_hypoxia_scores$wilcox_p_val),]
+rownames(drg36_hypoxia_scores) <- drg36_hypoxia_scores$Gene
+```
+```{r}
+head(drg36_hypoxia_scores)
+```
+
+## Q1 Q4 difference
+```{r}
+drg36_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = nrow(drg36_mat), ncol = 8))
+colnames(drg36_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+drg36_hypoxia_enrichment_quart$Gene <- rownames(drg36_mat)
+
+for(i in 1:nrow(drg36_hypoxia_enrichment_quart)){
+  gene <- drg36_hypoxia_enrichment_quart$Gene[i]
+  test_gene <- as.data.frame(t(drg36_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within_quartile_one_sample_per_donor","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  test_data <- subset(test_data, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+  
+  table_data <- as.data.frame(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+  if(nrow(table_data) > 2){
+    drg36_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+    drg36_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[3]]
+  
+  
+  
+    drg36_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q4"))[,"Freq"]
+    drg36_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q1"))[,"Freq"]
+    drg36_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q4"))[,"Freq"]
+    drg36_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q1"))[,"Freq"]
+  }
+  
+}
+
+drg36_hypoxia_enrichment_quart$fisher_p_adj <- p.adjust(drg36_hypoxia_enrichment_quart$fisher_p_val, method = "BH")
+```
+
+```{r}
+subset(drg36_hypoxia_enrichment_quart, fisher_p_adj < 0.05)
+```
+
+```{r}
+drg36_hypoxia_enrichment_quart$Significance <- ifelse(drg36_hypoxia_enrichment_quart$fisher_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(drg36_hypoxia_enrichment_quart) <- drg36_hypoxia_enrichment_quart$Gene
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+drg36_mat_bin <- drg36_mat
+drg36_mat_bin[drg36_mat_bin == "Mutation"] <- as.numeric(1)
+drg36_mat_bin[drg36_mat_bin == "No Mutation"] <- as.numeric(0)
+```
+
+```{r}
+class(drg36_mat_bin) <- "numeric"
+```
+
+```{r}
+summary_somatic_drg36 <- as.data.frame(colSums(drg36_mat_bin))
+colnames(summary_somatic_drg36) <- c("Muts_in_drg36")
+summary_somatic_drg36$WGS_AssayID <- rownames(summary_somatic_drg36)
+summary_somatic_drg36$bin_muts_in_drg36 <- ifelse(summary_somatic_drg36$Muts_in_drg36 == 0, yes = "No Mutation", no = "Mutation")
+```
+
+```{r}
+summary_somatic_drg36 <- merge(summary_somatic_drg36, 
+                               hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID",
+                                             "Buffa_signature_Sum_within_bin_one_sample_per_donor",
+                                             "Buffa_signature_Sum_within_quartile_one_sample_per_donor")],
+                               by = "WGS_AssayID")
+```
+
+```{r}
+wilcox.test(subset(summary_somatic_drg36, bin_muts_in_drg36 == "Mutation")[,"Buffa_signature_Sum_within"], 
+            subset(summary_somatic_drg36, bin_muts_in_drg36 == "No Mutation")[,"Buffa_signature_Sum_within"])
+```
+
+```{r}
+summary_somatic_drg36_q1q4 <- subset(summary_somatic_drg36, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+```
+
+```{r}
+fisher.test(table(summary_somatic_drg36_q1q4$bin_muts_in_drg36, summary_somatic_drg36_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+```{r}
+table(summary_somatic_drg36_q1q4$bin_muts_in_drg36, 
+      summary_somatic_drg36_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor)
+```
+
+
+
+# DRG 128 Somatic
+DRG genes with somatic mutations identified by both callers or a tier 1 indel (filtered data)
+```{r}
+drg_genes_128[drg_genes_128 %in% rownames(driver_data)]
+```
+```{r}
+length(drg_genes_128[drg_genes_128 %in% rownames(driver_data)])
+```
+
+DRG genes that do not have somatic mutations identified by both callers or a tier 1 indel (filtered data)
+```{r}
+drg_genes_128[drg_genes_128 %!in% rownames(driver_data)]
+```
+```{r}
+length(drg_genes_128[drg_genes_128 %!in% rownames(driver_data)])
+```
+
+```{r}
+drg128_mat <- as.matrix(driver_data[rownames(driver_data) %in% drg_genes_128,])
+drg128_mat = drg128_mat[, -c(1,2)]
+drg128_mat <- gsub("\\.","", drg128_mat)
+```
+Reorder signatures for oncoprint.  Only plot samples for which we have data from WGS/drivers. 
+```{r}
+# order driver samples by hypoxia scores
+drg128_mat <- drg128_mat[,rownames(hypoxia_op)[rownames(hypoxia_op) %in% colnames(drg128_mat)]]
+
+```
+
+```{r}
+drg128_mat[drg128_mat == "nsSNV"] <- "Mutation"
+drg128_mat[drg128_mat == "splicing"] <- "Mutation"
+drg128_mat[drg128_mat == "stopgain"] <- "Mutation"
+drg128_mat[drg128_mat == "stoploss"] <- "Mutation"
+drg128_mat[drg128_mat == "startloss"] <- "Mutation"
+drg128_mat[drg128_mat == "stopgain+nsSNV"] <- "Mutation"
+drg128_mat[drg128_mat == "nsSNV+splicing"] <- "Mutation"
+drg128_mat[drg128_mat == "nsSNV+stopgain"] <- "Mutation"
+drg128_mat[drg128_mat == "splicing+nsSNV"] <- "Mutation"
+
+drg128_mat[drg128_mat == ""] <- "No Mutation"
+```
+
+## Test for differences in scores
+```{r}
+drg128_hypoxia_scores <- as.data.frame(matrix(nrow = nrow(drg128_mat), ncol = 5))
+colnames(drg128_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+drg128_hypoxia_scores$Gene <- rownames(drg128_mat)
+
+for(i in 1:nrow(drg128_hypoxia_scores)){
+  gene <- drg128_hypoxia_scores$Gene[i]
+  test_gene <- as.data.frame(t(drg128_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  
+  table_data <- as.data.frame(table(test_data$Test_gene))
+  if(nrow(table_data) > 1){
+    drg128_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "Mutation")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+  
+    drg128_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "Mutation"))
+    drg128_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "No Mutation"))
+  }
+  
+}
+
+drg128_hypoxia_scores$wilcox_p_adj <- p.adjust(drg128_hypoxia_scores$wilcox_p_val, method = "BH")
+```
+
+```{r}
+drg128_hypoxia_scores$Significance <- ifelse(drg128_hypoxia_scores$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(drg128_hypoxia_scores) <- drg128_hypoxia_scores$Gene
+```
+
+Order data by p-value
+```{r}
+drg128_hypoxia_scores <- drg128_hypoxia_scores[order(drg128_hypoxia_scores$wilcox_p_val),]
+rownames(drg128_hypoxia_scores) <- drg128_hypoxia_scores$Gene
+```
+```{r}
+head(drg128_hypoxia_scores)
+```
+
+## Q1 Q4 difference
+```{r}
+drg128_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = nrow(drg128_mat), ncol = 8))
+colnames(drg128_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+drg128_hypoxia_enrichment_quart$Gene <- rownames(drg128_mat)
+
+for(i in 1:nrow(drg128_hypoxia_enrichment_quart)){
+  gene <- drg128_hypoxia_enrichment_quart$Gene[i]
+  test_gene <- as.data.frame(t(drg128_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within_quartile_one_sample_per_donor","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  test_data <- subset(test_data, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+  
+  table_data <- as.data.frame(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+  if(nrow(table_data) > 2){
+    drg128_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+    drg128_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[3]]
+  
+  
+  
+    drg128_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q4"))[,"Freq"]
+    drg128_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "Mutation") & (Var2 == "Q1"))[,"Freq"]
+    drg128_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q4"))[,"Freq"]
+    drg128_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "No Mutation") & (Var2 == "Q1"))[,"Freq"]
+  }
+  
+}
+
+drg128_hypoxia_enrichment_quart$fisher_p_adj <- p.adjust(drg128_hypoxia_enrichment_quart$fisher_p_val, method = "BH")
+```
+
+```{r}
+subset(drg128_hypoxia_enrichment_quart, fisher_p_adj < 0.05)
+```
+
+```{r}
+drg128_hypoxia_enrichment_quart$Significance <- ifelse(drg128_hypoxia_enrichment_quart$fisher_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+rownames(drg128_hypoxia_enrichment_quart) <- drg128_hypoxia_enrichment_quart$Gene
+```
+
+```{r}
+head(drg128_hypoxia_enrichment_quart)
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+drg128_mat_bin <- drg128_mat
+drg128_mat_bin[drg128_mat_bin == "Mutation"] <- as.numeric(1)
+drg128_mat_bin[drg128_mat_bin == "No Mutation"] <- as.numeric(0)
+```
+
+```{r}
+class(drg128_mat_bin) <- "numeric"
+```
+
+```{r}
+summary_somatic_drg128 <- as.data.frame(colSums(drg128_mat_bin))
+colnames(summary_somatic_drg128) <- c("Muts_in_drg128")
+summary_somatic_drg128$WGS_AssayID <- rownames(summary_somatic_drg128)
+summary_somatic_drg128$bin_muts_in_drg128 <- ifelse(summary_somatic_drg128$Muts_in_drg128 == 0, yes = "No Mutation", no = "Mutation")
+```
+
+```{r}
+summary_somatic_drg128 <- merge(summary_somatic_drg128, 
+                               hypoxia_op[,c("Buffa_signature_Sum_within","WGS_AssayID",
+                                             "Buffa_signature_Sum_within_bin_one_sample_per_donor",
+                                             "Buffa_signature_Sum_within_quartile_one_sample_per_donor")],
+                               by = "WGS_AssayID")
+```
+
+```{r}
+wilcox.test(subset(summary_somatic_drg128, bin_muts_in_drg128 == "Mutation")[,"Buffa_signature_Sum_within"], 
+            subset(summary_somatic_drg128, bin_muts_in_drg128 == "No Mutation")[,"Buffa_signature_Sum_within"])
+```
+
+```{r}
+summary_somatic_drg128_q1q4 <- subset(summary_somatic_drg128, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+```
+
+```{r}
+fisher.test(table(summary_somatic_drg128_q1q4$bin_muts_in_drg128, summary_somatic_drg128_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+```{r}
+table(summary_somatic_drg128_q1q4$bin_muts_in_drg128, 
+      summary_somatic_drg128_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor)
+```
+
+
+# CNAs
+```{r}
+rownames(rel_cna) <- paste0(rel_cna$gene_name,"_",rel_cna$gene_id)
+```
+
+Subset for genes in driver gene list and samples with data
+```{r}
+cna_mat <- as.matrix((rel_cna[(gsub("_.*","",rownames(rel_cna)) %in% driver_hypoxia_scores$Gene),colnames(rel_cna) %in% hypoxia_signatures_tum_data_single$WGS_AssayID]))
+```
+
+
+```{r}
+dim(cna_mat)
+```
+
+Remove enormous cna data frame
+```{r}
+rm(rel_cna)
+```
+
+```{r}
+cna_mat <- gsub("\\.","", cna_mat)
+cna_mat[as.numeric(cna_mat) <0] <- "Loss"
+cna_mat[as.numeric(cna_mat) >0] <- "Gain"
+cna_mat[as.numeric(cna_mat) == 0] <- "Neutral"
+```
+
+
+## Q1 vs Q4 enrichment
+```{r}
+cna_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = nrow(cna_mat), ncol = 9))
+colnames(cna_hypoxia_enrichment_quart) <- c("Gene","n_q4_gain","n_q1_gain","n_q4_neutral","n_q1_neutral","n_q4_loss","n_q1_loss","fisher_p_val","fisher_p_adj")
+cna_hypoxia_enrichment_quart$Gene <- rownames(cna_mat)
+
+for(i in 1:nrow(cna_hypoxia_enrichment_quart)){ #nrow(cna_hypoxia_enrichment)
+  gene <- cna_hypoxia_enrichment_quart$Gene[i]
+  test_gene <- as.data.frame(t(cna_mat)[,gene])
+  colnames(test_gene) <-"Test_gene"
+  test_gene$sample <- rownames(test_gene)
+  
+  test_data <- merge(test_gene, hypoxia_op[,c("Buffa_signature_Sum_within_quartile_one_sample_per_donor","WGS_AssayID")],
+                     by.x = "sample", by.y = "WGS_AssayID")
+  test_data <- subset(test_data, Buffa_signature_Sum_within_quartile_one_sample_per_donor %in% c("Q1","Q4"))
+  
+  table_data <- as.data.frame(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+  if(nrow(table_data) > 2){
+    cna_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+    if("Gain" %in% table_data$Var1){
+      cna_hypoxia_enrichment_quart$n_q4_gain[i] <- subset(table_data, (Var1 == "Gain") & (Var2 == "Q4"))[,"Freq"]
+      cna_hypoxia_enrichment_quart$n_q1_gain[i] <- subset(table_data, (Var1 == "Gain") & (Var2 == "Q1"))[,"Freq"]
+    }
+    if("Neutral" %in% table_data$Var1){
+      cna_hypoxia_enrichment_quart$n_q4_neutral[i] <- subset(table_data, (Var1 == "Neutral") & (Var2 == "Q4"))[,"Freq"]
+      cna_hypoxia_enrichment_quart$n_q1_neutral[i] <- subset(table_data, (Var1 == "Neutral") & (Var2 == "Q1"))[,"Freq"]
+    }
+    if("Loss" %in% table_data$Var1){
+      cna_hypoxia_enrichment_quart$n_q4_loss[i] <- subset(table_data, (Var1 == "Loss") & (Var2 == "Q4"))[,"Freq"]
+      cna_hypoxia_enrichment_quart$n_q1_loss[i] <- subset(table_data, (Var1 == "Loss") & (Var2 == "Q1"))[,"Freq"]
+    }
+  }
+}
+
+cna_hypoxia_enrichment_quart$fisher_p_adj <- p.adjust(cna_hypoxia_enrichment_quart$fisher_p_val, method = "BH")
+```
+
+```{r}
+rownames(cna_hypoxia_enrichment_quart) <- cna_hypoxia_enrichment_quart$Gene
+```
+
+```{r}
+cna_hypoxia_enrichment_quart$Significance <- ifelse(cna_hypoxia_enrichment_quart$fisher_p_adj < 0.05, yes = "Significant", no = "N.S.")
+```
+
+Order data by p-value
+```{r}
+cna_hypoxia_enrichment_quart <- cna_hypoxia_enrichment_quart[order(cna_hypoxia_enrichment_quart$fisher_p_val),]
+rownames(cna_hypoxia_enrichment_quart) <- cna_hypoxia_enrichment_quart$Gene
+```
+```{r}
+cna_hypoxia_enrichment_quart
+```
+
+Order cna driver data by hypoxia score
+```{r}
+# order cna samples by hypoxia scores
+cna_mat <- cna_mat[,rownames(hypoxia_op)[rownames(hypoxia_op) %in% colnames(cna_mat)]]
+
+```
+
+```{r}
+colnames(driver_mat) == colnames(cna_mat)
+```
+
+For plotting purposes, only keep genes with some sort of significance
+```{r}
+sig_cna_genes <- subset(cna_hypoxia_enrichment_quart, Significance == "Significant")$Gene
+cna_hypoxia_enrichment_quart_sub <- subset(cna_hypoxia_enrichment_quart, Gene %in% sig_cna_genes)
+```
+
+```{r}
+cna_mat_plot <- cna_mat[sig_cna_genes,]
+```
+
+Change rownames so that it's just the gene name and not the ENSG name
+```{r}
+rownames(cna_hypoxia_enrichment_quart_sub) <- gsub("_.*","", rownames(cna_hypoxia_enrichment_quart_sub))
+rownames(cna_mat_plot) <- gsub("_.*","", rownames(cna_mat_plot))
+```
+
+
+```{r}
+dim(cna_mat_plot)
+```
+
+```{r}
+colnames(driver_mat) == colnames(cna_mat_plot)
+```
+
+# Combined heatmap
+## Preparing Signature Data
+```{r}
+sbs_sig_columns <- c("SBS1", "SBS2", "SBS3",	"SBS5",	"SBS8",	
+                     "SBS13",	"SBS15",	"SBS17a",	"SBS17b", "SBS18",
+                     "SBS21", "SBS22b",	"SBS28", "SBS34",	"SBS37",
+                     "SBS38", "SBS40a",	"SBS40b",	"SBS44", "SBS52",
+                     "SBS54",	"SBS96D")
+
+id_sig_columns <- c("ID1","ID2","ID3","ID4","ID5",
+                     "ID6","ID8","ID9","ID12","ID83C")
+
+cx_sig_columns <- c("CX1_numbers","CX2_numbers","CX3_numbers","CX4_numbers","CX5_numbers",
+                     "CX7_numbers","CX8_numbers","CX11_numbers")
+
+mut_sig_columns <- c(sbs_sig_columns, id_sig_columns, cx_sig_columns)
+mut_sig_split <- as.data.frame(mut_sig_columns)
+colnames(mut_sig_split) <- c("sig_name")
+mut_sig_split$Signature_type <- c(rep("SBS",22),
+                                  rep("ID",10),
+                                  rep("CX",8))
+rownames(mut_sig_split) <- mut_sig_split$sig_name
+```
+
+```{r}
+mut_sig_mat <- t(as.matrix(hypoxia_op[colnames(cna_mat),mut_sig_columns]))
+
+sbs_sig_mat <- t(as.matrix(hypoxia_op[colnames(cna_mat),sbs_sig_columns]))
+id_sig_mat <- t(as.matrix(hypoxia_op[colnames(cna_mat),id_sig_columns]))
+cx_sig_mat <- t(as.matrix(hypoxia_op[colnames(cna_mat),cx_sig_columns]))
+```
+
+## Preparing signature annotation information
+### Coefficient colours
+```{r}
+all_coefficients_total <- c(rlmer_CX_outputs$Coefficient,
+                      rlmer_GI_outputs$Coefficient,
+                      rlmer_ID_outputs$Coefficient,
+                      rlmer_SBS_outputs$Coefficient)
+all_coefficients_nonzero <- c(rlmer_CX_outputs_nonzero$Coefficient,
+                      rlmer_ID_outputs_nonzero$Coefficient,
+                      rlmer_SBS_outputs_nonzero$Coefficient)
+```
+```{r}
+coefficient_colours_total <- colorRamp2(c(min(all_coefficients_total, na.rm = TRUE),
+                                    -0.0000000001,
+                                    0,
+                                    0.0000000001,
+                                    0.5,
+                                    1,
+                                    max(all_coefficients_total, na.rm = TRUE)),
+                                  c("purple1","lavender","white","lightyellow","gold","orange1","red"))
+coefficient_colours_nonzero <- colorRamp2(c(min(all_coefficients_nonzero, na.rm = TRUE),
+                                    0,
+                                    max(all_coefficients_nonzero, na.rm = TRUE)),
+                                  c("royalblue","white","firebrick"))
+```
+
+### SBS annotations
+```{r}
+rlmer_SBS_outputs$Significance <- ifelse(rlmer_SBS_outputs$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+rlmer_SBS_outputs_nonzero$Significance <- ifelse(rlmer_SBS_outputs_nonzero$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+```
+
+
+Make it clear which data is which
+```{r}
+colnames(rlmer_SBS_outputs) <- paste0(colnames(rlmer_SBS_outputs),"_total")
+colnames(rlmer_SBS_outputs_nonzero) <- paste0(colnames(rlmer_SBS_outputs_nonzero),"_nonzero")
+```
+
+Add a measure name column so we can match to raw data
+```{r}
+rlmer_SBS_outputs$Measure_name <- gsub("rlmer_","",rlmer_SBS_outputs$Model_total)
+rlmer_SBS_outputs_nonzero$Measure_name <- gsub("rlmer_","",rlmer_SBS_outputs_nonzero$Model_nonzero)
+rlmer_SBS_outputs_nonzero$Measure_name <- gsub("_nonzero","",rlmer_SBS_outputs_nonzero$Measure_name)
+```
+
+Make a list of all the signatures present (not all have models but all are represented in the heatmap)
+```{r}
+rlmer_SBS_annotations <- as.data.frame(sbs_sig_columns)
+colnames(rlmer_SBS_annotations) <- "SBS_list"
+```
+
+Merge SBS annotations
+```{r}
+rlmer_SBS_annotations <- merge(rlmer_SBS_annotations,
+                              rlmer_SBS_outputs,
+                              by.x = "SBS_list",
+                              by.y = "Measure_name",
+                              all = TRUE)
+rlmer_SBS_annotations <- merge(rlmer_SBS_annotations,
+                              rlmer_SBS_outputs_nonzero,
+                              by.x = "SBS_list",
+                              by.y = "Measure_name",
+                              all = TRUE)
+rownames(rlmer_SBS_annotations) <- rlmer_SBS_annotations$SBS_list
+```
+```{r}
+xtable(rlmer_SBS_annotations[,c("SBS_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
+                         "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")], display = c("s","s","e","e","e","e","e","e","e","e","e","e"))
+```
+
+Rearrange
+```{r}
+rlmer_SBS_annotations <- rlmer_SBS_annotations[sbs_sig_columns,]
+```
+
+```{r}
+sbs_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_SBS_annotations$Significance_total,
+                                         "Coefficient" = rlmer_SBS_annotations$Coefficient_total,
+                                         "Non-zero robustlmm" = rlmer_SBS_annotations$Significance_nonzero,
+                                         "Non-zero Coefficient" = rlmer_SBS_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "Coefficient" = coefficient_colours_total,
+                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+                           show_annotation_name = FALSE)
+```
+
+### ID annotations
+```{r}
+rlmer_ID_outputs$Significance <- ifelse(rlmer_ID_outputs$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+rlmer_ID_outputs_nonzero$Significance <- ifelse(rlmer_ID_outputs_nonzero$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+```
+
+Make it clear which data is which
+```{r}
+colnames(rlmer_ID_outputs) <- paste0(colnames(rlmer_ID_outputs),"_total")
+colnames(rlmer_ID_outputs_nonzero) <- paste0(colnames(rlmer_ID_outputs_nonzero),"_nonzero")
+```
+
+Add a measure name column so we can match to raw data
+```{r}
+rlmer_ID_outputs$Measure_name <- gsub("rlmer_","",rlmer_ID_outputs$Model_total)
+rlmer_ID_outputs_nonzero$Measure_name <- gsub("rlmer_","",rlmer_ID_outputs_nonzero$Model_nonzero)
+rlmer_ID_outputs_nonzero$Measure_name <- gsub("_nonzero","",rlmer_ID_outputs_nonzero$Measure_name)
+```
+
+Make a list of all the signatures present (not all have models but all are represented in the heatmap)
+```{r}
+rlmer_ID_annotations <- as.data.frame(id_sig_columns)
+colnames(rlmer_ID_annotations) <- "ID_list"
+```
+
+Merge ID annotations
+```{r}
+rlmer_ID_annotations <- merge(rlmer_ID_annotations,
+                              rlmer_ID_outputs,
+                              by.x = "ID_list",
+                              by.y = "Measure_name",
+                              all = TRUE)
+rlmer_ID_annotations <- merge(rlmer_ID_annotations,
+                              rlmer_ID_outputs_nonzero,
+                              by.x = "ID_list",
+                              by.y = "Measure_name",
+                              all = TRUE)
+rownames(rlmer_ID_annotations) <- rlmer_ID_annotations$ID_list
+```
+```{r}
+xtable(rlmer_ID_annotations[,c("ID_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
+                         "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")], display = c("s","s","e","e","e","e","e","e","e","e","e","e"))
+```
+
+Rearrange
+```{r}
+rlmer_ID_annotations <- rlmer_ID_annotations[id_sig_columns,]
+```
+
+```{r}
+id_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_ID_annotations$Significance_total,
+                                         "Coefficient" = rlmer_ID_annotations$Coefficient_total,
+                                         "Non-zero robustlmm" = rlmer_ID_annotations$Significance_nonzero,
+                                         "Non-zero Coefficient" = rlmer_ID_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "Coefficient" = coefficient_colours_total,
+                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+                           show_annotation_name = FALSE)
+```
+
+### CX annotations
+```{r}
+rlmer_CX_outputs$Significance <- ifelse(rlmer_CX_outputs$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+rlmer_CX_outputs_nonzero$Significance <- ifelse(rlmer_CX_outputs_nonzero$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+```
+
+Make it clear which data is which
+```{r}
+colnames(rlmer_CX_outputs) <- paste0(colnames(rlmer_CX_outputs),"_total")
+colnames(rlmer_CX_outputs_nonzero) <- paste0(colnames(rlmer_CX_outputs_nonzero),"_nonzero")
+```
+
+Add a measure name column so we can match to raw data
+```{r}
+rlmer_CX_outputs$Measure_name <- gsub("rlmer_","",rlmer_CX_outputs$Parameter_total)
+rlmer_CX_outputs_nonzero$Measure_name <- gsub("rlmer_","",rlmer_CX_outputs_nonzero$Parameter_nonzero)
+rlmer_CX_outputs_nonzero$Measure_name <- gsub("_nonzero","",rlmer_CX_outputs_nonzero$Measure_name)
+```
+
+Make a list of all the signatures present (not all have models but all are represented in the heatmap)
+```{r}
+rlmer_CX_annotations <- as.data.frame(cx_sig_columns)
+colnames(rlmer_CX_annotations) <- "CX_list"
+```
+
+Merge CX annotations
+```{r}
+rlmer_CX_annotations <- merge(rlmer_CX_annotations,
+                              rlmer_CX_outputs,
+                              by.x = "CX_list",
+                              by.y = "Variable_total",
+                              all = TRUE)
+rlmer_CX_annotations <- merge(rlmer_CX_annotations,
+                              rlmer_CX_outputs_nonzero,
+                              by.x = "CX_list",
+                              by.y = "Variable_nonzero",
+                              all = TRUE)
+rownames(rlmer_CX_annotations) <- rlmer_CX_annotations$CX_list
+```
+```{r}
+xtable(rlmer_CX_annotations[,c("CX_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
+                         "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")],
+       , display = c("s","s","e","e","e","e","e","e","e","e","e","e"))
+```
+
+Rearrange
+```{r}
+rlmer_CX_annotations <- rlmer_CX_annotations[cx_sig_columns,]
+```
+
+```{r}
+cx_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_CX_annotations$Significance_total,
+                                         "Coefficient" = rlmer_CX_annotations$Coefficient_total,
+                                         "Non-zero robustlmm" = rlmer_CX_annotations$Significance_nonzero,
+                                         "Non-zero Coefficient" = rlmer_CX_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "Coefficient" = coefficient_colours_total,
+                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+                                         annotation_name_rot = 45)
+```
+
+
+## Preparing GI heatmap data
+```{r}
+GI_columns <- c("pga_clonal","pga_subclonal","num.SNVs","Tier_1.counts",
+                "num_cnvs","num.svs","Kataegis_count","mtCN")
+
+GI_columns_rlmer <- c("pga_clonal","pga_subclonal","num.SNVs_div100","Tier_1.counts_div100",
+                    "num_cnvs","num.svs_div100","Kataegis_count","mtCN")
+
+GI_columns_name <- c("PGA Clonal","PGA Subclonal","SNVs","INDELs","CNAs","SVs","Kataegis","mtCN")
+```
+
+```{r}
+GI_columns_combined <- cbind(GI_columns, GI_columns_rlmer, GI_columns_name)
+```
+
+```{r}
+gi_mat <- t(as.matrix(hypoxia_op[,GI_columns]))
+rownames(gi_mat) <- c("PGA Clonal","PGA Subclonal","SNVs","INDELs","CNAs","SVs","Kataegis","mtCN")
+```
+
+### GI annotations
+
+Merge GI annotations
+```{r}
+rlmer_GI_annotations <- merge(GI_columns_combined,
+                              rlmer_GI_outputs,
+                              by.x = "GI_columns_rlmer",
+                              by.y = "Variable",
+                              all = TRUE)
+
+rownames(rlmer_GI_annotations) <- rlmer_GI_annotations$GI_columns_name
+```
+
+Rearrange
+```{r}
+rlmer_GI_annotations <- rlmer_GI_annotations[GI_columns_name,]
+```
+
+```{r}
+rlmer_GI_annotations$Significance <- ifelse(rlmer_GI_annotations$measure_p_adj < 0.05, yes = "Significant", no = "Not Significant")
+```
+
+
+```{r}
+gi_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_GI_annotations$Significance,
+                                         "Coefficient" = rlmer_GI_annotations$Coefficient,
+                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "Coefficient" = coefficient_colours_total),
+                                          show_annotation_name = FALSE)
+```
+
+## Preparing total DRG and driver heatmap
+```{r}
+total_drg_driver <- merge(summary_somatic_driver,
+                          summary_somatic_drg36, 
+                          by = "WGS_AssayID")
+total_drg_driver <- merge(total_drg_driver,
+                          summary_somatic_drg128, 
+                          by = "WGS_AssayID")
+rownames(total_drg_driver) <- total_drg_driver$WGS_Assay_ID
+
+total_drg_driver_mat <- t(as.matrix(total_drg_driver[,c("bin_muts_in_driver","bin_muts_in_drg36","bin_muts_in_drg128")]))
+rownames(total_drg_driver_mat) <- c("Mutations in Drivers","Mutations in DRG36","Mutations in DRG128")
+```
+
+```{r}
+xtable(rlmer_GI_annotations[,c("GI_columns_name","Coefficient","CI_low","CI_high","p","measure_p_adj")],
+       , display = c("s","s","e","e","e","e","e"))
+```
+
+
+## Colours
+### CNAs
+```{r}
+cna_colours_heatmap <- c("Loss" = "blue", "Neutral" = "white", "Gain" = "red")
+```
+
+### Mutations
+```{r}
+mutation_colours <- c("Mutation" = "lightseagreen", "No Mutation" = "white")
+```
+
+```{r}
+mutation_group_colours <- c("Mutation" = "seagreen", "No Mutation" = "white")
+```
+
+### Coefficient
+```{r}
+# coefficient_colours <- colorRamp2(c(min(rlmer_hallmark_outputs$Coefficient, na.rm = TRUE),
+#                                     0,
+#                                     max(rlmer_hallmark_outputs$Coefficient, na.rm = TRUE)),
+#                                   c("purple1","white","orange1"))
+```
+
+### Annotation colours
+```{r}
+pga_colours <- colorRamp2(c(0,100),c("white","darkred"))
+snv_colours <- colorRamp2(c(0,max(hypoxia_op$num.SNVs, na.rm = TRUE)),c("white","darkred"))
+indel_colours <- colorRamp2(c(0,max(hypoxia_op$Tier_1.counts, na.rm = TRUE)),c("white","darkred"))
+sv_colours <- colorRamp2(c(0,max(hypoxia_op$num.svs, na.rm = TRUE)),c("white","darkred"))
+cna_colours <- colorRamp2(c(0,max(hypoxia_op$num_cnvs, na.rm = TRUE)),c("white","darkred"))
+kataegis_colours <- colorRamp2(c(0,max(hypoxia_op$Kataegis_count, na.rm = TRUE)),c("white","darkred"))
+mtcn_colours <- colorRamp2(c(0,max(hypoxia_op$mtCN, na.rm = TRUE)),c("white","darkred"))
+cellularity_colours <- colorRamp2(c(0,max(hypoxia_op$Cellularity, na.rm = TRUE)),c("white","navyblue"))
+
+age_colours <- c("< 40" = "white","40-50" = "grey75","50-65" = "grey50","65-70" = "grey25","≥ 70" = "black")
+psa_colours <- c("0-9.9" = "navajowhite", "10-19.9" = "orange", "≥20" = "indianred")
+gleason_colours <- c("3+3" = "white", "3+4" = "yellow", "4+3" = "orange", "4+4" = "red", "3+5" = "maroon3", "4+5" = "orangered4", "5+4" = "firebrick4", "5+5" = "black")
+clin_t_colours <- c("T1" = "olivedrab2", "T2" = "green3", "T3" = "green4", "T4" = "darkgreen")
+erg_colours <- c("TRUE" = PPCG_colourlist$ERG_colourlist$`ERG positive`, "FALSE" = PPCG_colourlist$ERG_colourlist$`ERG negative`)
+erg_exp_colours <- c("ERG positive" = PPCG_colourlist$ERG_colourlist$`ERG positive`, "ERG negative" = PPCG_colourlist$ERG_colourlist$`ERG negative`)
+isup_colours <- c("1" = PPCG_colourlist$ISUP_colourlist$`1`, 
+                  "2" = PPCG_colourlist$ISUP_colourlist$`2`, 
+                  "3" = PPCG_colourlist$ISUP_colourlist$`3`, 
+                  "4" = PPCG_colourlist$ISUP_colourlist$`4`, 
+                  "5" = PPCG_colourlist$ISUP_colourlist$`5`)
+```
+
+### Signature colours
+```{r}
+mutsig_colours <- colorRamp2(c(0,max(log10(mut_sig_mat), na.rm = TRUE)),c("white","#355C7D"))
+
+sbs_colours <- colorRamp2(c(0,max(log10(sbs_sig_mat), na.rm = TRUE)),c("white","#F67280"))
+id_colours <- colorRamp2(c(0,max(log10(id_sig_mat), na.rm = TRUE)),c("white","#C06C84"))
+cx_colours <- colorRamp2(c(0,max(cx_sig_mat, na.rm = TRUE)),c("white","#355C7D"))
+```
+
+### GI colours
+```{r}
+gi_colours <- colorRamp2(c(0,max(log10(gi_mat), na.rm = TRUE)),c("white","darkred"))
+```
+
+## Heatmap annotations
+### Top annotation
+```{r}
+ha_row_annotation_hypoxia <- HeatmapAnnotation(Hypoxia = anno_barplot(hypoxia_op$Buffa_signature_Sum_within))
+ha_row_annotation_top <- HeatmapAnnotation(Hypoxia = anno_barplot(hypoxia_op$Buffa_signature_Sum_within),
+                                           "PGA Clonal" = hypoxia_op$pga_clonal,
+                                           "PGA Subclonal" = hypoxia_op$pga_subclonal,
+                                           SNVs = hypoxia_op$num.SNVs,
+                                           INDELs = hypoxia_op$Tier_1.counts,
+                                           SVs = hypoxia_op$num.svs,
+                                           CNAs = hypoxia_op$num_cnvs,
+                                           Kataegis = hypoxia_op$Kataegis_count,
+                                           mtCN = hypoxia_op$mtCN,
+                                           "Grade Group (GG)" = hypoxia_op$ISUP,
+                                           PSA = hypoxia_op$psa_bracket,
+                                           Age = hypoxia_op$age_bracket,
+                                           Cellularity = hypoxia_op$Cellularity,
+                                           "ETS Status" = hypoxia_op$ETS,
+                                           col = list("PGA Clonal" = pga_colours,
+                                                      "PGA Subclonal" = pga_colours,
+                                                      SNVs = snv_colours,
+                                                      INDELs = indel_colours,
+                                                      SVs = sv_colours,
+                                                      CNAs = cna_colours,
+                                                      Kataegis = kataegis_colours,
+                                                      mtCN = mtcn_colours,
+                                                      "Grade Group (GG)" = isup_colours,
+                                                      PSA = psa_colours,
+                                                      Age = age_colours,
+                                                      Cellularity = cellularity_colours,
+                                                      "ETS Status" = erg_colours
+                                           ))
+
+```
+
+### Significance annotations
+```{r}
+ha_driver_significance_annotation <- rowAnnotation("Q1 v Q4" = driver_hypoxia_enrichment_quart[c(driver_top10_genes),"Significance"],
+                                                   "Mutated v Not" = driver_hypoxia_scores[c(driver_top10_genes),"Significance"],
+                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey"),
+                                                              "Mutated v Not" = c("Significant" = "gold", "N.S." = "grey")),
+                                                   show_annotation_name = FALSE)
+
+ha_drg36_significance_annotation <- rowAnnotation("Q1 v Q4" = drg36_hypoxia_enrichment_quart[,"Significance"],
+                                                   "Mutated v Not" = drg36_hypoxia_scores[,"Significance"],
+                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey"),
+                                                              "Mutated v Not" = c("Significant" = "gold", "N.S." = "grey")))
+
+ha_cna_significance_annotation <- rowAnnotation("Q1 v Q4" = cna_hypoxia_enrichment_quart_sub$Significance,
+                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey")),
+                                                   show_annotation_name = FALSE)
+```
+
+```{r}
+# ha_mutsig_significance_annotation <- rowAnnotation(Q1vQ4 = ssgsea_wilcox_table$significance_q1_q4,
+#                                          # robustlmm = rlmer_hallmark_outputs$significance,
+#                                          # Coefficient = rlmer_hallmark_outputs$Coefficient,
+#                                          col = list(Q1vQ4 = c("Significant" = "firebrick", "N.S." = "grey")#,
+#                                                     # robustlmm = c("Significant" = "indianred", "N.S." = "grey"),
+#                                                     # Coefficient = coefficient_colours
+#                                                     ))
+```
+
+## Somatic mutation annotation
+```{r}
+mut_sets_annotation <- as.data.frame(c("Mutations in Drivers","Mutations in DRG36","Mutations in DRG128"))
+colnames(mut_sets_annotation) <- c("mutation_set")
+rownames(mut_sets_annotation) <- mut_sets_annotation$mutation_set
+mut_sets_annotation$q1_v_q4 <- NA
+mut_sets_annotation$mut_v_not <- NA
+
+mut_sets_annotation["Mutations in Drivers","q1_v_q4"] <- fisher.test(table(summary_somatic_driver_q1q4$bin_muts_in_driver, 
+                    summary_somatic_driver_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+mut_sets_annotation["Mutations in DRG36","q1_v_q4"] <- fisher.test(table(summary_somatic_drg36_q1q4$bin_muts_in_drg36, 
+                    summary_somatic_drg36_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+mut_sets_annotation["Mutations in DRG128","q1_v_q4"] <- fisher.test(table(summary_somatic_drg128_q1q4$bin_muts_in_drg128, 
+                    summary_somatic_drg128_q1q4$Buffa_signature_Sum_within_quartile_one_sample_per_donor))[[1]]
+
+mut_sets_annotation["Mutations in Drivers","mut_v_not"] <- wilcox.test(subset(summary_somatic_driver, bin_muts_in_driver == "Mutation")[,"Buffa_signature_Sum_within"], 
+                    subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+mut_sets_annotation["Mutations in DRG36","mut_v_not"] <- wilcox.test(subset(summary_somatic_drg36, bin_muts_in_drg36 == "Mutation")[,"Buffa_signature_Sum_within"], 
+                    subset(summary_somatic_drg36, bin_muts_in_drg36 == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+mut_sets_annotation["Mutations in DRG128","mut_v_not"] <- wilcox.test(subset(summary_somatic_drg128, bin_muts_in_drg128 == "Mutation")[,"Buffa_signature_Sum_within"], 
+                    subset(summary_somatic_drg128, bin_muts_in_drg128 == "No Mutation")[,"Buffa_signature_Sum_within"])[[3]]
+```
+
+```{r}
+mut_sets_annotation$q1_v_q4_significance <- ifelse(mut_sets_annotation$q1_v_q4 < 0.05, yes = "Significant", no = "N.S.")
+mut_sets_annotation$mut_v_not_significance <- ifelse(mut_sets_annotation$mut_v_not < 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+ha_mut_sets_annotation <- rowAnnotation("Q1 v Q4" = mut_sets_annotation[,"q1_v_q4_significance"],
+                                                   "Mutated v Not" = mut_sets_annotation[,"mut_v_not_significance"],
+                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey"),
+                                                              "Mutated v Not" = c("Significant" = "gold", "N.S." = "grey")),
+                                                   show_annotation_name = TRUE,
+                                        annotation_name_rot = 45)
+```
+
+## Genomic Instability heatmap
+```{r}
+gen_inst_heatmap <- Heatmap(log10(gi_mat),
+                              name = "GI Measures (log10)",
+                              right_annotation = gi_row_annotation_right,
+                              show_column_names = FALSE,
+                              column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
+                             col = gi_colours,
+                             cluster_rows = FALSE)
+```
+
+## Driver Mutation heatmap
+```{r}
+driver_mut_heatmap <- Heatmap(driver_mat[driver_top10_genes,],
+                              name = "Driver Mutations",
+                              # bottom_annotation = ha_row_annotation_bottom,
+                              right_annotation = ha_driver_significance_annotation,
+                              show_column_names = FALSE,
+                              column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
+                              col = mutation_colours,
+                             cluster_rows = TRUE)
+```
+
+## DRG and Driver total heatmap
+```{r}
+drg_mut_heatmap <- Heatmap(total_drg_driver_mat,
+                              name = "Mutations in Groups",
+                              right_annotation = ha_mut_sets_annotation,
+                              show_column_names = FALSE,
+                              column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
+                              col = mutation_group_colours,
+                             cluster_rows = TRUE)
+```
+
+
+## Driver Copy Number Heatmap
+```{r}
+driver_cn_heatmap <- Heatmap(cna_mat_plot,
+                             name = "Driver CNAs",
+                             # top_annotation = ha_row_annotation_top,
+                             # bottom_annotation = ha_row_annotation_bottom,
+                             top_annotation = ha_row_annotation_top,
+                             right_annotation = ha_cna_significance_annotation,
+                             show_column_names = FALSE,
+                             column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor[rownames(hypoxia_op) %in% colnames(cna_mat_plot)],
+                             col = cna_colours_heatmap,
+                             cluster_rows = TRUE)
+```
+
+## Mutational Signature Heatmap
+
+```{r}
+# mutsig_heatmap <- Heatmap(mut_sig_mat,
+#                           # right_annotation = ha_mutsig_significance_annotation,
+#                           show_column_names = FALSE,
+#                           column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
+#                           row_split = mut_sig_split$Signature_type,
+#                           col = mutsig_colours,
+#                           cluster_rows = FALSE)
+```
+
+```{r}
+sbs_sig_heatmap <- Heatmap(log10(sbs_sig_mat+1),
+                           name = "SBS Mutations (log10)",
+                           right_annotation = sbs_row_annotation_right,
+                           show_column_names = FALSE,
+                           column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor[rownames(hypoxia_op) %in% colnames(sbs_sig_mat)],
+                           col = sbs_colours,
+                           cluster_rows = FALSE)
+```
+
+```{r}
+id_sig_heatmap <- Heatmap(log10(id_sig_mat+1),
+                          name = "ID INDELS (log10)",
+                          right_annotation = id_row_annotation_right,
+                          show_column_names = FALSE,
+                          column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor[rownames(hypoxia_op) %in% colnames(id_sig_mat)],
+                          col = id_colours,
+                          cluster_rows = FALSE)
+```
+
+```{r}
+cx_sig_heatmap <- Heatmap(cx_sig_mat,
+                          name = "CX CNAs",
+                          right_annotation = cx_row_annotation_right,
+                          show_column_names = FALSE,
+                          column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor[rownames(hypoxia_op) %in% colnames(cx_sig_mat)],
+                          col = cx_colours,
+                          cluster_rows = FALSE)
+```
+
+# Combine heatmaps
+```{r}
+ht_list = driver_cn_heatmap %v% driver_mut_heatmap %v% drg_mut_heatmap %v% gen_inst_heatmap %v% sbs_sig_heatmap %v% id_sig_heatmap %v% cx_sig_heatmap
+```
+
+```{r fig.height=20, fig.width=17}
+draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(2, 2, 24, 2, 2, 2), "mm"))
+```
+
+# Supplementary figures
+## GI boxplots
+```{r}
+snv_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = num.SNVs))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of SNVs (log10)")+
+  ggtitle("SNVs")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)
+snv_plot_q
+```
+
+```{r}
+indel_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Tier_1.counts))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of INDELs")+
+  ggtitle("INDELs")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+indel_plot_q
+```
+
+```{r}
+indel_plot_log_q <- 
+ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Tier_1.counts))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of INDELs (log10)")+
+  ggtitle("INDELs")+
+  theme_light()+
+  scale_y_log10()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+indel_plot_log_q
+```
+
+```{r}
+sv_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = num.svs))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of SVs (log10)")+
+  ggtitle("SVs")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)
+sv_plot_q
+```
+
+```{r}
+cna_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = num_cnvs))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of CNAs (log10)")+
+  ggtitle("CNAs")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)
+cna_plot_q
+```
+```{r}
+hypoxia_signatures_tum_data_single$pga_total <- hypoxia_signatures_tum_data_single$pga_clonal + hypoxia_signatures_tum_data_single$pga_subclonal
+```
+
+```{r}
+pga_tot_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = pga_total))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Total PGA")+
+  ggtitle("Total PGA")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+pga_tot_plot_q
+```
+
+```{r}
+pga_clonal_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = pga_clonal))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Clonal PGA")+
+  ggtitle("PGA Clonal")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+pga_clonal_plot_q
+```
+
+```{r}
+pga_subclonal_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = pga_subclonal))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  xlab("")+
+  ylab("Subclonal PGA")+
+  ggtitle("PGA Subclonal")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+pga_subclonal_plot_q
+```
+
+```{r}
+kataegis_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Kataegis_count))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Kataegis Events")+
+  ggtitle("Kataegis")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+kataegis_plot_q
+```
+
+```{r}
+mtcn_plot_q <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = mtCN))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("mtCN")+
+  ggtitle("mtCN")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)
+mtcn_plot_q
+```
+
+### Composite boxplot
+```{r fig.height=8, fig.width=14}
+grid.arrange(pga_clonal_plot_q+labs(tag = "A"), pga_subclonal_plot_q+labs(tag = "B"),pga_tot_plot_q+labs(tag = "C"), kataegis_plot_q+labs(tag = "D"),mtcn_plot_q+labs(tag = "E"),
+             snv_plot_q+labs(tag = "F"), indel_plot_log_q+labs(tag = "G"), sv_plot_q+labs(tag = "H"), cna_plot_q+labs(tag = "I"),
+             nrow = 2, ncol = 10,
+             layout_matrix = rbind(c(1,1,2,2,3,3,4,4,5,5),
+                                   c(NA,6,6,7,7,8,8,9,9,NA)))
+```
+## GI scatter
+```{r}
+snv_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = num.SNVs))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of SNVs (log10)")+
+  ggtitle("SNVs")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+snv_plot_s
+```
+
+```{r}
+indel_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = Tier_1.counts))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of INDELs")+
+  ggtitle("INDELs")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+indel_plot_s
+```
+
+```{r}
+indel_plot_log_s <- 
+ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = Tier_1.counts))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of INDELs (log10)")+
+  ggtitle("INDELs")+
+  theme_light()+
+  scale_y_log10()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+indel_plot_log_s
+```
+
+```{r}
+sv_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = num.svs))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of SVs (log10)")+
+  ggtitle("SVs")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+sv_plot_s
+```
+
+```{r}
+cna_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = num_cnvs))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Number of CNAs (log10)")+
+  ggtitle("CNAs")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_y_log10()+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+cna_plot_s
+```
+
+```{r}
+pga_tot_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = pga_total))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Total PGA")+
+  ggtitle("Total PGA")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+pga_tot_plot_s
+```
+
+```{r}
+pga_clonal_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = pga_clonal))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Clonal PGA")+
+  ggtitle("PGA Clonal")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+pga_clonal_plot_s
+```
+
+```{r}
+pga_subclonal_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = pga_subclonal))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Subclonal PGA")+
+  ggtitle("PGA Subclonal")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+pga_subclonal_plot_s
+```
+
+```{r}
+kataegis_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = Kataegis_count))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("Kataegis Events")+
+  ggtitle("Kataegis")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+kataegis_plot_s
+```
+
+```{r}
+mtcn_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = mtCN))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("")+
+  ylab("mtCN")+
+  ggtitle("mtCN")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5, size = 14), 
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        legend.position = "none")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+mtcn_plot_s
+```
+
+### Composite scatter plot
+```{r fig.height=8, fig.width=14}
+grid.arrange(pga_clonal_plot_s+labs(tag = "A"), pga_subclonal_plot_s+labs(tag = "B"),pga_tot_plot_s+labs(tag = "C"), kataegis_plot_s+labs(tag = "D"), mtcn_plot_s+labs(tag = "E"),
+             snv_plot_s+labs(tag = "F"), indel_plot_log_s+labs(tag = "G"), sv_plot_s+labs(tag = "H"), cna_plot_s+labs(tag = "I"),
+             nrow = 2, ncol = 10,
+             layout_matrix = rbind(c(1,1,2,2,3,3,4,4,5,5),
+                                   c(NA,6,6,7,7,8,8,9,9,NA)))
+```
+
+```{r fig.height=16, fig.width=14}
+grid.arrange(pga_clonal_plot_q+labs(tag = "A"), pga_subclonal_plot_q, pga_tot_plot_q, kataegis_plot_q, mtcn_plot_q,
+             snv_plot_q, indel_plot_log_q, sv_plot_q, cna_plot_q,
+             pga_clonal_plot_s+labs(tag = "B"), pga_subclonal_plot_s, pga_tot_plot_s, kataegis_plot_s, mtcn_plot_s,
+             snv_plot_s, indel_plot_log_s, sv_plot_s, cna_plot_s,
+             nrow = 4, ncol = 10,
+             layout_matrix = rbind(c(1,1,2,2,3,3,4,4,5,5),
+                                   c(NA,6,6,7,7,8,8,9,9,NA),
+                                   c(10,10,11,11,12,12,13,13,14,14),
+                                   c(NA,15,15,16,16,17,17,18,18,NA)))
+```
+
+## SBS box and scatter plots
+```{r}
+sbs_data_melt <- melt(as.data.table(hypoxia_signatures_tum_data_single), 
+                      id.vars = c("PPCG_SampleID",
+                                  "Buffa_signature_Sum_within", "Buffa_signature_Sum_within_quartile_one_sample_per_donor"),
+                      measure.vars = sbs_sig_columns,
+                      variable.name = "Signature", value.name = "Number")
+```
+
+```{r}
+sbs_plot_q <- ggplot(sbs_data_melt, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Number))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Quartile")+
+  ylab("Number of SNVs")+
+  ggtitle("")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()
+sbs_plot_q
+```
+
+```{r}
+sbs_plot_s <- ggplot(sbs_data_melt, aes(x = Buffa_signature_Sum_within, y = Number))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Score")+
+  ylab("Number of SNVs")+
+  ggtitle("")+
+  theme_light()+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+sbs_plot_s
+```
+
+```{r fig.height=18, fig.width=14}
+grid.arrange(sbs_plot_q+labs(tag = "A"),
+             sbs_plot_s+labs(tag = "B"),
+             nrow = 2, ncol = 1)
+```
+
+## ID box and scatter plots
+```{r}
+id_data_melt <- melt(as.data.table(hypoxia_signatures_tum_data_single), 
+                      id.vars = c("PPCG_SampleID",
+                                  "Buffa_signature_Sum_within", "Buffa_signature_Sum_within_quartile_one_sample_per_donor"),
+                      measure.vars = id_sig_columns,
+                      variable.name = "Signature", value.name = "Number")
+```
+
+```{r}
+id_plot_q <- ggplot(id_data_melt, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Number))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Quartile")+
+  ylab("Number of INDELs")+
+  ggtitle("")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()
+id_plot_q
+```
+
+```{r}
+id_plot_s <- ggplot(id_data_melt, aes(x = Buffa_signature_Sum_within, y = Number))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Score")+
+  ylab("Number of INDELs")+
+  ggtitle("")+
+  theme_light()+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+id_plot_s
+```
+
+```{r fig.height=16, fig.width=14}
+grid.arrange(id_plot_q+labs(tag = "A"),
+             id_plot_s+labs(tag = "B"),
+             nrow = 2, ncol = 1)
+```
+
+## CX box and scatter plots
+```{r}
+cx_data_melt <- melt(as.data.table(hypoxia_signatures_tum_data_single), 
+                      id.vars = c("PPCG_SampleID",
+                                  "Buffa_signature_Sum_within", "Buffa_signature_Sum_within_quartile_one_sample_per_donor"),
+                      measure.vars = cx_sig_columns,
+                      variable.name = "Signature", value.name = "Number")
+```
+
+```{r}
+cx_plot_q <- ggplot(cx_data_melt, aes(x = Buffa_signature_Sum_within_quartile_one_sample_per_donor, y = Number))+
+  geom_jitter(alpha = 0.3, width = 0.3, height = 0, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.3)+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Quartile")+
+  ylab("Number of CNAs")+
+  ggtitle("")+
+  theme_light()+
+  # geom_signif(map_signif_level = TRUE, test = "wilcox.test",
+  #             comparisons = list(c("Q4","Q1")), tip_length = 0)+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()
+cx_plot_q
+```
+
+```{r}
+cx_plot_s <- ggplot(cx_data_melt, aes(x = Buffa_signature_Sum_within, y = Number))+
+  geom_point(alpha = 0.3, aes(colour = Buffa_signature_Sum_within_quartile_one_sample_per_donor))+
+  # scale_colour_manual(values = c("dodgerblue","black"))+
+  xlab("Hypoxia Score")+
+  ylab("Number of CNAs")+
+  ggtitle("")+
+  theme_light()+
+  theme(text = element_text(size = 16),
+        legend.position = "none")+
+  facet_wrap(~Signature, scales = "free_y")+
+  scale_colour_manual(values = hypoxia_colours_q)+
+  scale_y_log10()+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")
+cx_plot_s
+```
+
+```{r fig.height=16, fig.width=14}
+grid.arrange(cx_plot_q+labs(tag = "A"),
+             cx_plot_s+labs(tag = "B"),
+             nrow = 2, ncol = 1)
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,205 @@
+---
+title: "Creating PPCG combined table with clinical data - V7"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 3
+---
+
+The purpose of this R notebook is to harmonise the merging of different PPCG data into one big table with clinical information. 
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+
+# Data
+Read in data
+
+## Original files used
+
+**Change these values on your system**
+```{r}
+files = list(
+    combined_data = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/combined_PPCG_WGS_RNA_summary_data_v7_2024-12-05.txt',
+    clinical_data = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGCoreDatav282024D_DATA_2024-12-02_1508.csv',
+    path_review = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGPathReviewV10202_DATA_2024-09-27_1059.csv',
+    outdir = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/'
+    )
+```
+
+## Combined data
+Date: 2024-12-04
+
+Source: Maria Jakobsdottir
+```{r}
+PPCG_data <- read.delim(files$combined_data, header = TRUE, sep = "\t")
+```
+```{r}
+dim(PPCG_data)
+```
+Should be 2215 rows, 150 columns
+
+
+## Clinical data
+Data release version: 
+
+Date: 2024-12-02
+
+Source: RedCap
+
+/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGCoreDatav282024D_DATA_2024-12-02_1508.csv
+```{r}
+clinical_data <- read.csv(files$clinical_data)
+```
+```{r}
+dim(clinical_data)
+```
+2098 rows, 28 columns
+
+## Path review
+Data release version: 
+
+Date: 2024-09-27
+
+Source: RedCap
+
+/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGPathReviewV10202_DATA_2024-09-27_1059.csv
+```{r}
+path_data <- read.csv(files$path_review)
+```
+```{r}
+dim(path_data)
+```
+476 rows, 18 columns
+
+
+# Standardising clinical data
+Re-formatting clinical data.  
+
+Gleason. 
+```{r}
+# Make Gleason score total
+clinical_data$gleason_total <- paste0(clinical_data$gleason_predominantly,"+",clinical_data$gleason_less_predominantly)
+
+clinical_data$gleason_total[(clinical_data$gleason_total == "missing+missing")] <- NA
+clinical_data$gleason_total[clinical_data$gleason_total == "not applicable+not applicable"] <- NA
+
+clinical_data$gleason_total <- as.factor(clinical_data$gleason_total)
+clinical_data$gleason_total <- factor(clinical_data$gleason_total, levels = c("3+3","3+4","4+3","4+4","3+5","4+5","5+4","5+5"))
+```
+
+PSA brackets
+```{r}
+clinical_data$psa_at_tumour_collection[(clinical_data$psa_at_tumour_collection == "missing")] <- NA
+clinical_data$psa_at_tumour_collection[(clinical_data$psa_at_tumour_collection == "not applicable")] <- NA
+
+clinical_data$psa_at_tumour_collection <- as.numeric(clinical_data$psa_at_tumour_collection)
+
+clinical_data$psa_bracket[clinical_data$psa_at_tumour_collection < 10] <- "0-9.9"
+clinical_data$psa_bracket[(clinical_data$psa_at_tumour_collection >= 10) & (clinical_data$psa_at_tumour_collection < 20)] <- "10-19.9"
+clinical_data$psa_bracket[clinical_data$psa_at_tumour_collection >= 20] <- "≥20"
+
+clinical_data$psa_bracket <- as.factor(clinical_data$psa_bracket)
+clinical_data$psa_bracket <- factor(clinical_data$psa_bracket, levels = c("0-9.9","10-19.9","≥20"))
+```
+
+Age brackets
+```{r}
+clinical_data$age_at_tumour_collection[(clinical_data$age_at_tumour_collection == "missing")] <- NA
+clinical_data$age_at_tumour_collection[(clinical_data$age_at_tumour_collection == "not applicable")] <- NA
+
+clinical_data$age_at_tumour_collection <- as.numeric(clinical_data$age_at_tumour_collection)
+
+clinical_data$age_bracket[clinical_data$age_at_tumour_collection < 40] <- "< 40"
+clinical_data$age_bracket[(clinical_data$age_at_tumour_collection >= 40) & (clinical_data$age_at_tumour_collection < 50)] <- "40-50"
+clinical_data$age_bracket[(clinical_data$age_at_tumour_collection >= 50) & (clinical_data$age_at_tumour_collection < 65)] <- "50-65"
+clinical_data$age_bracket[(clinical_data$age_at_tumour_collection >= 65) & (clinical_data$age_at_tumour_collection < 70)] <- "65-70"
+clinical_data$age_bracket[clinical_data$age_at_tumour_collection >= 70] <- "≥ 70"
+
+clinical_data$age_bracket <- as.factor(clinical_data$age_bracket)
+clinical_data$age_bracket <- factor(clinical_data$age_bracket, levels = c("< 40","40-50","50-65","65-70","≥ 70"))
+```
+
+Clinical T bracket
+```{r}
+clinical_data$clin_t_stage[clinical_data$clin_t_stage == "missing"] <- NA
+clinical_data$clin_t_stage[clinical_data$clin_t_stage == "not applicable"] <- NA
+
+clinical_data$clin_t_bracket <- substr(clinical_data$clin_t_stage, start = 0, stop = 2)
+clinical_data$clin_t_bracket <- as.factor(clinical_data$clin_t_bracket)
+```
+
+ISUP grade group
+```{r}
+clinical_data$ISUP_Grade <- clinical_data$gleason_grade_group
+```
+
+```{r}
+dim(clinical_data)
+```
+2098 33
+
+IDC calls
+Harmonising capitalisation of IDC calls
+```{r}
+path_data$Cribriform_Intraductal_Y_N <- toupper(path_data$cribriform__intraductal_yn)
+```
+
+
+# Merging data
+
+Two samples from the blacklist is present in the clinical data. We'll merge keeping only all.x to avoid reintroducing those two samples. 
+
+```{r}
+clinical_data$ppcg_donor_id[clinical_data$ppcg_donor_id %!in% PPCG_data$PPCG_Donor_ID]
+```
+
+
+```{r}
+PPCG_data <- merge(PPCG_data,
+                   clinical_data,
+                   by.x = "PPCG_Donor_ID",
+                   by.y = "record_id",
+                   all.x = TRUE)
+dim(PPCG_data)
+```
+2215 182
+
+```{r}
+PPCG_data <- merge(PPCG_data,
+                   path_data,
+                   by.x = "PPCG_Donor_ID",
+                   by.y = "record_id",
+                   all.x = TRUE)
+dim(PPCG_data)
+```
+2215 200
+
+# Saving data
+
+```{r}
+write.table(PPCG_data, paste0(files$outdir,
+                              "combined_PPCG_WGS_RNA_summary_data_clinical_v7_",
+                              Sys.Date(),
+                              ".txt"),
+            sep = "\t", row.names = FALSE)
+```
+```{r}
+saveRDS(PPCG_data, paste0(files$outdir,
+                              "combined_PPCG_WGS_RNA_summary_data_clinical_v7_",
+                              Sys.Date(),
+                              ".rds"))
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```
+

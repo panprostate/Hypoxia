@@ -1,0 +1,497 @@
+---
+title: "Manuscript December 2024, Figure 4 - metastasis features. RNA data release 1.4k10prerelease"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+Analysis for figure 4 in Hypoxia manuscript December 2024.
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(finalfit)
+library(ggplot2)
+library(ggpubr)
+library(ggsci)
+library(ggsignif)
+library(ggsurvfit)
+library(grid)
+library(gridExtra)
+library(splitstackshape) # for paired analysis
+library(survival)
+library(tidyr)
+library(viridis)
+library(xtable)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+# Data
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               timing_trajectories = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/Chris_trajectories/evolutionary_orderings_210824/PPCG_selected_primary_samples_sample_groups_G3.Rdata")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## Combined data
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+
+
+# Merge data and select samples
+Use Tier 1 Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+summary(hypoxia_signatures_tum_data_single)
+```
+
+
+
+Here is a list of the IDs that were used for the single tumour sample per patient analysis:
+```{r}
+hypoxia_signatures_tum_data_single$PPCG_SampleID
+```
+ 
+
+
+# Paired primaries and mets
+
+```{r}
+combined_data$RNA_Sample_Type <- as.factor(combined_data$RNA_Sample_Type)
+combined_data$MetastaticSite <- as.factor(combined_data$MetastaticSite)
+summary(combined_data)
+```
+
+```{r}
+combined_data_paired <- subset(combined_data, (PPCG_Donor_ID %in% unique(combined_data$PPCG_Donor_ID[duplicated(combined_data$PPCG_Donor_ID)])) & 
+                                 (RNA_Sample_Type != "BEN"))
+combined_data_paired$donor_and_type <- paste0(combined_data_paired$PPCG_Donor_ID, "_", combined_data_paired$RNA_Sample_Type)
+```
+```{r}
+dim(combined_data_paired)
+```
+
+
+```{r}
+combined_data_paired_long <- subset(combined_data_paired, RNA_Sample_Type %in% c("MET","TUM"))
+combined_data_paired_long <- getanID(combined_data_paired_long[,c("PPCG_Donor_ID","Buffa_signature_Sum_within","RNA_Sample_Type","MetastaticSite","donor_and_type")], c(paste("donor_and_type")))
+
+for(i in 1:nrow(combined_data_paired_long)){
+  if(combined_data_paired_long$RNA_Sample_Type[i] == "MET" & combined_data_paired_long$.id[i] == 2){
+    temp_sample_data <- subset(combined_data_paired_long, PPCG_Donor_ID == combined_data_paired_long$PPCG_Donor_ID[i])
+    if("TUM" %in% temp_sample_data$RNA_Sample_Type){
+      temp_row <- subset(temp_sample_data, RNA_Sample_Type == "TUM")
+      temp_row$.id <- 2
+      
+      combined_data_paired_long <-rbind(combined_data_paired_long, temp_row)
+    }
+  }
+  if(combined_data_paired_long$RNA_Sample_Type[i] == "MET" & combined_data_paired_long$.id[i] == 3){
+    temp_sample_data <- subset(combined_data_paired_long, PPCG_Donor_ID == combined_data_paired_long$PPCG_Donor_ID[i])
+    if("TUM" %in% temp_sample_data$RNA_Sample_Type){
+      temp_row <- subset(temp_sample_data, RNA_Sample_Type == "TUM")
+      temp_row <- temp_row[1]
+      temp_row$.id <- 3
+      
+      combined_data_paired_long <-rbind(combined_data_paired_long, temp_row)
+    }
+  }
+    
+}
+
+combined_data_paired_long <- reshape(combined_data_paired_long, 
+        idvar = c("PPCG_Donor_ID",".id"), timevar = "RNA_Sample_Type", direction = "wide")
+```
+
+```{r}
+combined_data_paired_long_only <- subset(combined_data_paired_long, !is.na(Buffa_signature_Sum_within.MET) & !is.na(Buffa_signature_Sum_within.TUM))
+```
+
+```{r}
+combined_data_paired_long_only$line_colour <- ifelse(combined_data_paired_long_only$Buffa_signature_Sum_within.TUM > combined_data_paired_long_only$Buffa_signature_Sum_within.MET, "Lower_in_Met", "Higher_in_MET")
+combined_data_paired_long_only$multisample <- ifelse(combined_data_paired_long_only$PPCG_Donor_ID %in%  combined_data_paired_long_only$PPCG_Donor_ID[duplicated(combined_data_paired_long_only$PPCG_Donor_ID)],
+                                                          "Multiple pairs per patient","Single pair per patient")
+combined_data_paired_long_only$MetastaticSite.MET <- as.character(combined_data_paired_long_only$MetastaticSite.MET)
+combined_data_paired_long_only$MetastaticSite.MET[is.na(combined_data_paired_long_only$MetastaticSite.MET)] <- "Unknown"
+combined_data_paired_long_only$MetastaticSite.MET[combined_data_paired_long_only$MetastaticSite.MET == "BONE"] <- "Bone"
+combined_data_paired_long_only$MetastaticSite.MET[combined_data_paired_long_only$MetastaticSite.MET == "LN"] <- "Lymph Node"
+combined_data_paired_long_only$MetastaticSite.MET <- as.factor(combined_data_paired_long_only$MetastaticSite.MET)
+```
+
+```{r}
+combined_data_paired_long_only
+```
+
+Make a data frame with a single pair per patient
+```{r}
+combined_data_paired_long_only_single <- subset(combined_data_paired_long_only, .id == "1")
+```
+
+```{r}
+paired_plot <- ggpaired(combined_data_paired_long_only_single, cond1 = "Buffa_signature_Sum_within.TUM", cond2 = "Buffa_signature_Sum_within.MET", line.color = "line_colour", palette = "npg",
+         xlab = "Sample Type", ylab = "Hypoxia Score")+
+  scale_x_discrete(labels = c("Primary","Metastasis"))+
+  scale_colour_npg(name = "Line Colour:", labels = c("Higher in metastatic\n         sample", "Lower in metastastatic\n         sample"))+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Buffa_signature_Sum_within.TUM","Buffa_signature_Sum_within.MET")), test = "wilcox.test", tip_length = 0, y_position = 50)+
+  theme_light()+
+  theme(legend.text = element_text(size = 12), legend.position = "bottom")
+paired_plot
+```
+
+
+```{r}
+paired_plot_facet <- ggpaired(combined_data_paired_long_only_single, cond1 = "Buffa_signature_Sum_within.TUM", cond2 = "Buffa_signature_Sum_within.MET", facet.by =  "MetastaticSite.MET", line.color = "line_colour", palette = "npg",
+         xlab = "Sample Type", ylab = "Hypoxia Score")+
+  scale_x_discrete(labels = c("Primary","Metastasis"))+
+  theme_light()+
+  theme(legend.position = "none")+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Buffa_signature_Sum_within.TUM","Buffa_signature_Sum_within.MET")), test = "wilcox.test", tip_length = 0, y_position = 50)
+paired_plot_facet
+```
+
+```{r fig.height=8, fig.width=6}
+grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"), nrow = 2, ncol = 1)
+```
+
+
+```{r}
+wilcox.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            paired = TRUE
+            )
+```
+
+```{r}
+wilcox.test(subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Bone")$Buffa_signature_Sum_within.TUM,
+            subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Bone")$Buffa_signature_Sum_within.MET,
+            paired = TRUE
+            )
+```
+
+```{r}
+wilcox.test(subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Lymph Node")$Buffa_signature_Sum_within.TUM,
+            subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Lymph Node")$Buffa_signature_Sum_within.MET,
+            paired = TRUE
+            )
+```
+```{r}
+# wilcox.test(subset(combined_data_paired_long_only, MetastaticSite.MET == "BONE")$Buffa_signature_Sum_within.TUM,
+#             subset(combined_data_paired_long_only, MetastaticSite.MET == "LN")$Buffa_signature_Sum_within.TUM
+#             )
+```
+
+```{r}
+dim(combined_data_paired_long_only_single)
+```
+
+```{r}
+length(unique(combined_data_paired_long_only_single$PPCG_Donor_ID))
+```
+
+```{r}
+cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            method = "spearman"
+            )
+```
+
+```{r}
+cor_pm_plot <- ggplot(combined_data_paired_long_only_single, aes(x = Buffa_signature_Sum_within.TUM, y = Buffa_signature_Sum_within.MET))+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")+
+  geom_point(alpha = 0.8, aes(colour = MetastaticSite.MET))+
+  scale_colour_bmj(name = "Metastatic Site")+
+  # scale_shape_manual(name = "Multisample", values = c(17,19))+
+  theme_light()+
+  xlab("Hypoxia Score - Primary Sample")+
+  ylab("Hypoxia Score - Metastatic Sample")+
+  annotate("text", label = paste0("Spearman's ρ = ",
+                                 round(cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            method = "spearman")[[4]], digits = 3),
+                                 "; p = ",
+            format(cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            method = "spearman")[[3]], scientific = TRUE, digits = 3)), x = -15, y = 90, colour = "black")+
+  theme(legend.position = "bottom")+
+  guides(shape = guide_legend(nrow = 2), colour = guide_legend(nrow = 2))
+cor_pm_plot
+```
+
+
+
+```{r fig.height=12, fig.width=6}
+grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"), cor_pm_plot+labs(tag = "C"),
+             nrow = 3, ncol = 1)
+```
+
+
+# Primaries with or without mets
+```{r}
+# single sample of each type
+combined_data_single <- combined_data[!duplicated(combined_data[,c("RNA_Sample_Type","PPCG_Donor_ID")]),]
+combined_data_single <- subset(combined_data_single, RNA_Sample_Type %in% c("TUM","MET"))
+combined_data_single <- as.data.frame(combined_data_single)
+
+sample_and_type <- as.data.frame(table(combined_data_single$RNA_Sample_Type, combined_data_single$PPCG_Donor_ID))
+
+combined_data_single$met_status <- NA
+for(i in 1:nrow(combined_data_single)){
+  sample_and_type_sub_tum <- subset(sample_and_type, Var2 == combined_data_single$PPCG_Donor_ID[i] &
+                                      Var1 == "TUM")
+  sample_and_type_sub_met <- subset(sample_and_type, Var2 == combined_data_single$PPCG_Donor_ID[i] &
+                                      Var1 == "MET")
+  
+  if(combined_data_single$RNA_Sample_Type[i] == "TUM" & sample_and_type_sub_met$Freq > 0){
+    combined_data_single$met_status[i] <- "Primary with met"
+  }else if(combined_data_single$RNA_Sample_Type[i] == "TUM" & sample_and_type_sub_met$Freq == 0){
+    combined_data_single$met_status[i] <- "Primary without met"
+  }
+  if(combined_data_single$RNA_Sample_Type[i] == "MET"){
+    combined_data_single$met_status[i] <- "Metastasis"
+  }
+}
+
+combined_data_single$met_status <- as.factor(combined_data_single$met_status)
+combined_data_single$met_status <- factor(combined_data_single$met_status,
+                                               levels = c("Primary without met","Primary with met","Metastasis"))
+```
+
+```{r}
+ggplot(combined_data_single, aes(x = met_status, y = Buffa_signature_Sum_within))+
+  geom_jitter(alpha = 0.5, width = 0.3, colour = "grey", height = 0)+
+  geom_boxplot(alpha = 0.5)+
+  xlab("Metastasis status")+
+  ylab("Hypoxia Score")+
+  theme_light()+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Primary without met","Primary with met"),
+                                                          c("Primary without met","Metastasis"),
+                                                          c("Primary with met","Metastasis")),
+              test = "wilcox.test", tip_length = 0,
+              y_position = c(75,90,115))+
+  scale_x_discrete(labels=c("Primary with met" = "Primary with \nmetastasis", 
+                            "Primary without met" = "Primary without \nmetastasis",
+                            "Metastasis" = "Metastasis"))
+```
+
+```{r}
+wilcox.test(subset(combined_data_single, met_status == "Primary without met")$Buffa_signature_Sum_within,
+            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within)
+```
+
+```{r}
+wilcox.test(subset(combined_data_single, met_status == "Primary without met")$Buffa_signature_Sum_within,
+            subset(combined_data_single, met_status == "Metastasis")$Buffa_signature_Sum_within)
+```
+
+```{r}
+wilcox.test(subset(combined_data_single, met_status == "Metastasis")$Buffa_signature_Sum_within,
+            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within)
+```
+
+```{r}
+dim(combined_data_single)
+```
+
+# Figure 2 Mets etc
+```{r}
+names(PPCG_colourlist$new_metastatic_biology_indicator_colourlist) <- c("no_mets_biol","mets_biol")
+PPCG_colourlist$new_metastatic_biology_indicator_colourlist[1] <- "grey25"
+```
+
+```{r}
+mets_biol_plot <- ggplot(hypoxia_signatures_tum_data_single, aes(x = new_metastatic_biology_indicator, y = Buffa_signature_Sum_within))+
+  geom_jitter(width = 0.3, alpha = 0.3, aes(colour = new_metastatic_biology_indicator), height = 0)+
+  geom_boxplot(alpha = 0.5, outlier.colour = NA)+ # no outlier plotting because we have geom_jitter to plot the points
+  theme_light()+
+  xlab("New Metastatic Biology Indicator")+
+  ylab("Hypoxia Score")+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("no_mets_biol","mets_biol")),
+              test = "wilcox.test", tip_length = 0,
+              y_position = c(60))+
+  scale_colour_manual(values = PPCG_colourlist$new_metastatic_biology_indicator_colourlist)+
+  theme(legend.position = "none")+
+  scale_x_discrete(labels=c("mets_biol" = "Metastatic \nBiology", 
+                            "no_mets_biol" = "No Metastatic \nBiology"))
+
+met_status_plot <- ggplot(combined_data_single, aes(x = met_status, y = Buffa_signature_Sum_within))+
+  geom_jitter(alpha = 0.5, width = 0.3, height = 0)+
+  geom_boxplot(outlier.colour = NULL, alpha = 0.5)+
+  xlab("Metastasis status")+
+  ylab("Hypoxia Score")+
+  theme_light()+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Primary without met","Primary with met"),
+                                                          c("Primary without met","Metastasis"),
+                                                          c("Primary with met","Metastasis")),
+              test = "wilcox.test", tip_length = 0,
+              y_position = c(75,100,125))
+
+# paired_prim_met_plot <- ggpaired(subset(combined_data_paired_tum_met, has_tum_and_met == "Yes"), 
+#          x = "RNA_Sample_Type", y = "Buffa_signature_Sum_within",
+#  line.color = "tum_met_direction", line.size = 0.4,
+#  palette = c("royalblue","firebrick"), id = "PPCG_Donor_ID")+
+#   theme(legend.position = "none")
+
+```
+
+```{r fig.height=6, fig.width=8}
+grid.arrange(mets_biol_plot, met_status_plot,
+             nrow = 1, ncol = 4,
+             layout_matrix = rbind(c(1,1,2,2)))
+```
+
+```{r fig.height=4, fig.width=8}
+grid.arrange(mets_biol_plot+labs(tag = "A"), met_status_plot+labs(tag = "B"),
+             nrow = 1, ncol = 2,
+             layout_matrix = rbind(c(1,2)))
+```
+
+```{r}
+summary(as.factor(hypoxia_signatures_tum_data_single$new_metastatic_biology_indicator))
+```
+
+```{r}
+summary(combined_data_single$met_status)
+```
+
+# Try plotting data as Clarissa suggests
+"Fig. 7: I suggest to combine A and B into one figure with the following panels: benign, no mets biol, mets biol, mets. (all mets biol samples by definition are from patients with a met. It does not matter whether we have analyzed it or not).  "
+
+Make a column for new label - use one sample per patient per tissue type
+```{r}
+combined_data_single_all <- combined_data[!duplicated(combined_data[,c("RNA_Sample_Type","PPCG_Donor_ID")]),]
+# combined_data_single_all$met_category <- combined_data_single_all$RNA_Sample_Type
+
+combined_data_single_all$met_category[!is.na(combined_data_single_all$new_metastatic_biology_indicator)] <- combined_data_single_all$new_metastatic_biology_indicator
+
+combined_data_single_all$met_category[combined_data_single_all$RNA_Sample_Type == "MET"] <- "Metastasis"
+combined_data_single_all$met_category[combined_data_single_all$RNA_Sample_Type == "BEN"] <- "Benign"
+combined_data_single_all$met_category[combined_data_single_all$RNA_Sample_Type == "NOR"] <- "Normal"
+combined_data_single_all$met_category[combined_data_single_all$RNA_Sample_Type == "DistantNormal"] <- "Normal"
+combined_data_single_all$met_category[combined_data_single_all$RNA_Sample_Type == "LYMPH_NOR"] <- "Normal"
+combined_data_single_all$met_category[combined_data_single_all$met_category == "not applicable"] <- NA
+combined_data_single_all$met_category[combined_data_single_all$met_category == "mets_biol"] <- "Metastatic\n Biology"
+combined_data_single_all$met_category[combined_data_single_all$met_category == "no_mets_biol"] <- "No Metastatic\n Biology"
+```
+
+Exclude NOR and rename "not applicable" to NA
+```{r}
+combined_data_single_all_sub <- subset(combined_data_single_all, met_category != "Normal")
+combined_data_single_all_sub$met_category <- as.factor(combined_data_single_all_sub$met_category)
+combined_data_single_all_sub$met_category <- factor(combined_data_single_all_sub$met_category, levels = c("Benign",
+                                                                                                          "No Metastatic\n Biology",
+                                                                                                          "Metastatic\n Biology",
+                                                                                                          "Metastasis"))
+```
+
+```{r}
+dim(subset(combined_data_single_all_sub, !is.na(Buffa_signature_Sum_within)))
+table(subset(combined_data_single_all_sub, !is.na(Buffa_signature_Sum_within))$met_category)
+```
+
+```{r}
+combined_data_single_all_sub_hypoxia <- subset(combined_data_single_all_sub, !is.na(Buffa_signature_Sum_within))
+```
+
+```{r}
+wilcox_met_status_stats <- as.data.frame(matrix(nrow = 6, ncol = 6))
+colnames(wilcox_met_status_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted")
+wilcox_met_status_stats$Status_1 <- c(rep("Benign",3),rep("No Metastatic\n Biology",2),"Metastatic\n Biology")
+wilcox_met_status_stats$Status_2 <- c("No Metastatic\n Biology","Metastatic\n Biology","Metastasis",
+                                      "Metastatic\n Biology","Metastasis","Metastasis")
+
+for(i in 1:nrow(wilcox_met_status_stats)){
+  
+  wilcox_met_status_stats$n_Status_1[i] <- nrow(subset(combined_data_single_all_sub_hypoxia, met_category == wilcox_met_status_stats$Status_1[i]))
+  wilcox_met_status_stats$n_Status_2[i] <- nrow(subset(combined_data_single_all_sub_hypoxia, met_category == wilcox_met_status_stats$Status_2[i]))
+  
+  wilcox_met_status_stats$wilcox_p[i] <- wilcox.test(subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within)[[3]]
+}
+
+wilcox_met_status_stats$wilcox_p_adjusted <- p.adjust(wilcox_met_status_stats$wilcox_p, method = "BH")
+```
+
+```{r}
+wilcox_met_status_stats
+```
+
+```{r}
+combined_data_single_all_sub_met <- subset(combined_data_single_all_sub, !is.na(met_category))
+```
+
+```{r}
+new_met_status_plot <- ggplot(combined_data_single_all_sub_met, aes(x = met_category, y = Buffa_signature_Sum_within))+
+  geom_boxplot(outlier.colour = NA)+ # Because we show individual data points
+  geom_jitter(alpha = 0.5, aes(colour = met_category), height = 0)+
+  theme_light()+
+  xlab("Sample and Patient Status")+
+  ylab("Hypoxia Score")+
+  scale_colour_manual(values = c("Benign" = "skyblue",
+                                 "No Metastatic\n Biology" = PPCG_colourlist$new_metastatic_biology_indicator_colourlist$no_mets_biology,
+                                 "Metastatic\n Biology" = "#698B22",
+                                 "Metastasis" = "forestgreen"))+
+  theme(legend.position = "none")+
+  geom_signif(map_signif_level = TRUE, test = "wilcox.test", tip_length = 0,
+              comparisons = list(c("Benign","No Metastatic\n Biology"),
+                                 c("Benign","Metastatic\n Biology"),
+                                 c("Benign","Metastasis"),
+                                 c("No Metastatic\n Biology","Metastatic\n Biology"),
+                                 c("No Metastatic\n Biology","Metastasis"),
+                                 c("Metastatic\n Biology","Metastasis")), 
+              y_position = c(28,43,48,
+                             33,38,28))+
+  coord_cartesian(ylim = c(-35,55))
+new_met_status_plot
+```
+
+# Combine figures for main and supplementary
+## Main figure
+
+```{r fig.width=8, fig.height=10}
+grid.arrange(new_met_status_plot+labs(tag = "A"),
+             cor_pm_plot+labs(tag = "B"),
+             nrow = 2)
+```
+
+## Supp figure
+```{r fig.height=8, fig.width=6}
+grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"),
+             nrow = 2, ncol = 1)
+```
+
+
+# Session info
+```{r}
+sessionInfo()
+```
+

@@ -1,0 +1,139 @@
+---
+title: "ssGSEA for PPCG RNAseq - v1.4k10prerelease"
+output: html_notebook
+---
+
+# Libraries
+```{r}
+library(dplyr)
+library(GSVA)
+library(msigdbr)
+library(org.Hs.eg.db)
+library(qs)
+library(SummarizedExperiment)
+library(xtable)
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+# Data
+Release 1.3 is just used for the metadata associated with it. The was not provided with the 1.4k10 release but will have been the same. 
+```{r}
+files = list(
+    rna_data_sup = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_RNA/K10_unsupervised/PPCG_RNAseq_RUVIII_K10.qs',
+    rna_metadata = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_RNA/DEPRECATED_Release_1.3/PPCG_RNAseq_RUVIIIPRPS_Supervised.qs')
+```
+
+## RNA data
+
+Data release version: 1.4/k10
+
+Date: 2024-08-23
+
+Source: Ramyar Molania - FTP box
+
+rna_dat = qread("/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_RNA/K10_unsupervised/PPCG_RNAseq_RUVIII_K10.qs")
+```{r}
+rna_dat_unsupervised = qread(files$rna_data_sup)
+```
+```{r}
+str(rna_dat_unsupervised)
+```
+
+```{r}
+rna_dat_metadata = qread(files$rna_metadata)
+```
+
+
+
+# Gene sets
+
+## Hallmark genes
+"This package was generated with MSigDB v7.5.1 (released January 2022)"
+```{r}
+h_gene_sets <- msigdbr(species = "Homo sapiens", category = "H")
+```
+
+```{r}
+table(h_gene_sets$gs_name)
+```
+
+
+## Match gene sets to names
+Match genes to names
+```{r}
+h_gene_sets_partial <- merge(h_gene_sets, 
+                     as.data.frame((rna_dat_metadata@elementMetadata)[,c("all.ppcg.trans","hgnc_symbol")]),
+                     by.x = "ensembl_gene",
+                     by.y = "all.ppcg.trans")
+```
+```{r}
+table(h_gene_sets_partial$gs_name)
+```
+
+
+```{r}
+h_gene_sets <- merge(h_gene_sets, 
+                     as.data.frame((rna_dat_metadata@elementMetadata)[,c("all.ppcg.trans","hgnc_symbol")]),
+                     by.x = "ensembl_gene",
+                     by.y = "all.ppcg.trans",
+                     all.x = TRUE)
+```
+
+```{r}
+sum(is.na(h_gene_sets$hgnc_symbol))
+```
+
+## Summary of genes used and not
+```{r}
+original_gene_numbers <- as.data.frame(table(h_gene_sets$gs_name))
+release_gene_numbers <- as.data.frame(table(h_gene_sets_partial$gs_name))
+
+colnames(original_gene_numbers) <- c("Gene_set","Total_genes_in_set")
+colnames(release_gene_numbers) <- c("Gene_set","Set_genes_in_tier_1")
+
+hallmark_gene_numbers <- merge(original_gene_numbers,release_gene_numbers,
+                               by = "Gene_set")
+```
+
+```{r}
+xtable(hallmark_gene_numbers)
+```
+
+```{r}
+missing_genes <- anti_join(h_gene_sets, h_gene_sets_partial)
+```
+
+```{r}
+write.table(missing_genes,file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/ssgsea_hallmark_gs_missing_from_supervised_1.3_",Sys.Date(),".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+## Gene set list
+```{r}
+msigdbr_list = split(x = h_gene_sets$hgnc_symbol, f = h_gene_sets$gs_name)
+```
+
+# ssGSEA
+
+```{r}
+ssgsea_parameters <- ssgseaParam(expr = rna_dat_unsupervised,
+                      geneSets = msigdbr_list)
+
+ssgseaResults <- gsva(ssgsea_parameters)
+```
+
+```{r}
+ssgseaResults <- as.data.frame(t(ssgseaResults))
+ssgseaResults$sample <- rownames(ssgseaResults)
+```
+
+```{r}
+write.table(ssgseaResults,
+            file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/ssgsea_hallmark_gs_",Sys.Date(),".txt"), sep = "\t", row.names = FALSE)
+```
+
+```{r}
+sessionInfo()
+```
+

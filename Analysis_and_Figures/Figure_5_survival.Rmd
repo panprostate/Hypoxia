@@ -1,0 +1,468 @@
+---
+title: "Manuscript December 2024, Figure 5 - survival features. RNA data release 1.4k10 prerelease"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+Analysis for figure 5 in Hypoxia manuscript December 2024.
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(finalfit)
+library(ggplot2)
+library(ggpubr)
+library(ggsci)
+library(ggsignif)
+library(ggsurvfit)
+library(grid)
+library(gridExtra)
+library(lmtest)
+library(splitstackshape) # for paired analysis
+library(survival)
+library(tidyr)
+library(viridis)
+library(xtable)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+```{r}
+hypoxia_colours_q <- list("Q1" = "#14556e",
+                          "Q2" = "#67889a",
+                          "Q3" = "#c06842",
+                          "Q4" = "#9c2f15")
+hypoxia_colours_q2 <- list("Q1" = "#8995bc",
+                          "Q2" = "#8c7893",
+                          "Q3" = "#955569",
+                          "Q4" = "#823c52")
+hypoxia_colours_surv <- c("#14556e","#14556e","#67889a","#67889a",  
+                          "#c06842","#c06842","#9c2f15","#9c2f15")
+```
+```{r}
+hypoxia_colours_bin <- list("Low" = "#3E6F84",
+                            "High" = "#AE4C2C")
+hypoxia_colours_bin2 <- list("Low" = "#8B87A8",
+                             "High" = "#8C495E")
+```
+
+# Data
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## Combined data
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+## Adjustments
+```{r}
+combined_data$pga_total <- combined_data$pga_clonal + combined_data$pga_subclonal
+```
+
+```{r}
+combined_data$donor_relapse_interval <- as.numeric(combined_data$donor_relapse_interval)
+```
+
+# Merge data and select samples
+Use Tier 1 Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+summary(hypoxia_signatures_tum_data_single)
+```
+
+Here is a list of the IDs that were used for the single tumour sample per patient analysis:
+```{r}
+hypoxia_signatures_tum_data_single$PPCG_SampleID
+```
+
+# Preparing survival data
+## Survival - overall
+```{r}
+hist(hypoxia_signatures_tum_data_single$pga_clonal, breaks = 25)
+hist(hypoxia_signatures_tum_data_single$pga_subclonal, breaks = 25)
+hist((hypoxia_signatures_tum_data_single$pga_clonal + hypoxia_signatures_tum_data_single$pga_subclonal), breaks = 25)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single$status <- NA
+for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
+  if(is.na(hypoxia_signatures_tum_data_single$death_ind[i])){
+    
+  }else if(hypoxia_signatures_tum_data_single$death_ind[i] == "dead"){
+    hypoxia_signatures_tum_data_single$status[i] <- 1
+  }else{
+    hypoxia_signatures_tum_data_single$status[i] <- 0
+  }
+}
+hypoxia_signatures_tum_data_single$donor_interval_of_last_followup <- as.numeric(hypoxia_signatures_tum_data_single$donor_interval_of_last_followup)
+```
+
+
+## Survival - relapse
+```{r}
+hypoxia_signatures_tum_data_single$status_relapse <- NA
+for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
+  if(is.na(hypoxia_signatures_tum_data_single$relapse_ind[i])){
+    
+  }else if(hypoxia_signatures_tum_data_single$relapse_ind[i] == "relapsed"){
+    hypoxia_signatures_tum_data_single$status_relapse[i] <- 1
+  }else if(hypoxia_signatures_tum_data_single$relapse_ind[i] == "no relapse"){
+    hypoxia_signatures_tum_data_single$status_relapse[i] <- 0
+  }
+}
+hypoxia_signatures_tum_data_single$donor_relapse_interval <- as.numeric(hypoxia_signatures_tum_data_single$donor_relapse_interval)
+```
+
+
+## Survival - mets
+```{r}
+hypoxia_signatures_tum_data_single$status_mets <- NA
+for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
+  if(is.na(hypoxia_signatures_tum_data_single$mets_ind[i])){
+    
+  }else if(hypoxia_signatures_tum_data_single$mets_ind[i] == "mets"){
+    hypoxia_signatures_tum_data_single$status_mets[i] <- 1
+  }else if(hypoxia_signatures_tum_data_single$mets_ind[i] == "no mets"){
+    hypoxia_signatures_tum_data_single$status_mets[i] <- 0
+  }
+}
+hypoxia_signatures_tum_data_single$donor_first_mets_interval_from_m0 <- as.numeric(hypoxia_signatures_tum_data_single$donor_first_mets_interval_from_m0)
+```
+
+# Cox PH
+```{r}
+hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin <- ifelse(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within_quartile_one_sample_per_donor == "Q4", yes = "Q4", n = "Q1-Q3")
+```
+
+```{r}
+hypoxia_signatures_tum_data_single$pga_status <- NA
+for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
+  if(is.na(hypoxia_signatures_tum_data_single$pga_total[i])){
+    
+  }else if(hypoxia_signatures_tum_data_single$pga_total[i] > median(hypoxia_signatures_tum_data_single$pga_total, na.rm = TRUE)){
+    hypoxia_signatures_tum_data_single$pga_status[i] <- "PGA High"
+  }else if(hypoxia_signatures_tum_data_single$pga_total[i] <= median(hypoxia_signatures_tum_data_single$pga_total, na.rm = TRUE)){
+    hypoxia_signatures_tum_data_single$pga_status[i] <- "PGA Low"
+  }
+}
+```
+
+## Preparing data for FinalFit
+```{r}
+hypoxia_signatures_tum_data_single$pga_status <- as.factor(hypoxia_signatures_tum_data_single$pga_status)
+hypoxia_signatures_tum_data_single$pga_status <- factor(hypoxia_signatures_tum_data_single$pga_status, levels = c("PGA Low","PGA High"))
+
+labels_df <- extract_variable_label(hypoxia_signatures_tum_data_single)
+
+labels_df["Buffa_signature_Sum_within"] <- c("Hypoxia Score")
+labels_df["Buffa_signature_Sum_within_quartile_one_sample_per_donor"] <- c("Hypoxia Quartile")
+labels_df["Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin"] <- c("Hypoxia Quartiles")
+labels_df["pga_status"] <- c("Total PGA")
+labels_df["age_at_tumour_collection"] <- c("Age")
+labels_df["ISUP_Grade"] <- c("Grade Group")
+
+hypoxia_signatures_tum_data_single <- ff_relabel(hypoxia_signatures_tum_data_single, labels_df)
+
+```
+
+```{r}
+dependent_os  <- "Surv(donor_interval_of_last_followup, status)"
+dependent_relapse <- "Surv(donor_relapse_interval, status_relapse)"
+dependent_mets <- "Surv(donor_first_mets_interval_from_m0, status_mets)"
+
+explanatory_cel   <- c("Buffa_signature_Sum_within", "pga_total", "age_at_tumour_collection", "ISUP_Grade", "Cellularity")
+explanatory_quart_bin_rest_cel   <- c("Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin", "pga_status", "age_at_tumour_collection", "ISUP_Grade","Cellularity")
+
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_os, explanatory_cel)
+```
+
+## Overall Survival
+Get sample numbers
+```{r}
+full_os <- coxph(Surv(donor_interval_of_last_followup, status) ~ Buffa_signature_Sum_within + pga_total + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_os
+```
+
+```{r}
+full_os <- coxph(Surv(donor_interval_of_last_followup, status) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin + pga_status + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_os
+```
+
+### Final fit
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_os, explanatory_cel, add_dependent_label = FALSE) %>% 
+    rename("Overall survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+hypoxia_signatures_tum_data_single %>%
+  hr_plot(dependent_os, explanatory_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_os, explanatory_quart_bin_rest_cel, add_dependent_label = FALSE) %>% 
+    rename("Overall survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+os_q4_rest_cel <- hypoxia_signatures_tum_data_single %>% 
+  hr_plot(dependent_os, explanatory_quart_bin_rest_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5),
+          dependent_label = "A. Overall Survival")
+plot(os_q4_rest_cel)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_os, explanatory_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_os, explanatory_quart_bin_rest_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+## Relapse free survival
+Get sample numbers
+```{r}
+full_rfs <- coxph(Surv(donor_relapse_interval, status_relapse) ~ Buffa_signature_Sum_within + pga_total + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_rfs
+```
+
+```{r}
+full_rfs <- coxph(Surv(donor_relapse_interval, status_relapse) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin + pga_status + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_rfs
+```
+
+### Finalfit
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_relapse, explanatory_cel, add_dependent_label = FALSE) %>% 
+    rename("Relapse free survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+  hr_plot(dependent_relapse, explanatory_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_relapse, explanatory_quart_bin_rest_cel, add_dependent_label = FALSE) %>% 
+    rename("Relapse free survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+rfs_q4_rest_cel <- hypoxia_signatures_tum_data_single %>% 
+  hr_plot(dependent_relapse, explanatory_quart_bin_rest_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5), 
+          dependent_label = "B. Relapse Free Survival")
+plot(rfs_q4_rest_cel)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_relapse, explanatory_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_relapse, explanatory_quart_bin_rest_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+## Metastasis free survival
+Get sample numbers
+```{r}
+full_mfs <- coxph(Surv(donor_first_mets_interval_from_m0, status_mets) ~ Buffa_signature_Sum_within + pga_total + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_mfs
+```
+
+```{r}
+full_mfs <- coxph(Surv(donor_first_mets_interval_from_m0, status_mets) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin + pga_status + age_at_tumour_collection + ISUP_Grade + Cellularity, 
+      data = hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+full_mfs
+```
+
+### Finalfit
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_mets, explanatory_cel, add_dependent_label = FALSE) %>% 
+    rename("Metastasis free survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+  hr_plot(dependent_mets, explanatory_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    finalfit(dependent_mets, explanatory_quart_bin_rest_cel, add_dependent_label = FALSE) %>% 
+    rename("Metastasis free survival" = label) %>% 
+    rename(" " = levels) %>% 
+    rename("  " = all) %>%
+  xtable()
+```
+```{r}
+mfs_q4_rest_cel <- hypoxia_signatures_tum_data_single %>% 
+  hr_plot(dependent_mets, explanatory_quart_bin_rest_cel,
+          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
+                         geom_errorbarh(height=0.2), 
+                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
+          column_space = c(-1,0.2,1.5),
+          dependent_label = "C. Metastasis Free Survival")
+plot(mfs_q4_rest_cel)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_mets, explanatory_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+```{r}
+hypoxia_signatures_tum_data_single %>% 
+    coxphmulti(dependent_mets, explanatory_quart_bin_rest_cel) %>% 
+    cox.zph() %>% 
+    {zph_result <<- .} %>% 
+    plot()
+```
+
+```{r}
+zph_result
+```
+
+# Combined CoxPH plot
+
+```{r fig.height=10, fig.width=8}
+grid.arrange(os_q4_rest_cel, rfs_q4_rest_cel, mfs_q4_rest_cel,
+             nrow = 3)
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
+
+ 

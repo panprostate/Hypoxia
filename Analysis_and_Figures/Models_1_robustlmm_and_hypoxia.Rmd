@@ -1,0 +1,2445 @@
+---
+title: "RobustLMM of hypoxia in RNA data release 1.4k10 rearranged equations"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+Somewhat complete robust lmm analysis for publication. 
+
+Hypoxia signatures from previous runs have been read in. In this case hypoxia scores were calculated by scaling the expression of the hypoxia genes within the sample rather than across. Cell line experiments suggest this works best. 
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggsci)
+library(ggthemes)
+library(gridExtra)
+library(patchwork)
+library(performance)
+library(RColorBrewer)
+library(robustlmm)
+library(sjPlot)
+library(xtable)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+# Data
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## Combined data
+Combined data from `../manuscript_dec_2024_code/Preparation_2_combining_PPCG_WGS_RNA_with_clinical_data_v7.Rmd` and `../manuscript_dec_2024_code/Preparation_1_combining_PPCG_WGS_RNA_data_v7.Rmd`. Check this file for version info. 
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+
+## CN signature numbers
+```{r}
+cna_colnames <- c("CX1",  "CX2",  "CX3",  "CX4",  "CX5",  "CX7",  "CX8",  "CX11")
+cna_colnames_counts <- paste0(cna_colnames,"_numbers")
+```
+
+### Multiply CNA signature proportions by number of CNAs
+```{r}
+combined_data[,cna_colnames_counts] <- combined_data[,cna_colnames]*combined_data$num_cnvs
+```
+
+# Merge data and select samples
+Use Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+Select only tumour samples. Then only one sample per individual donor. 
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+Here is a list of the IDs that were used for the single tumour sample per patient analysis:
+```{r}
+hypoxia_signatures_tum_data_single$PPCG_SampleID
+```
+
+# Subset data for modelling
+
+## Genomic instability
+### PGA Clonal
+```{r}
+lm_pga_clonal_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(pga_clonal))
+```
+
+### PGA Subclonal
+```{r}
+lm_pga_subclonal_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(pga_subclonal))
+```
+
+### SNVs
+```{r}
+lm_snvs_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(num.SNVs))
+```
+
+### INDELs
+```{r}
+lm_indels_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(Tier_1.counts))
+```
+
+### CNAs
+```{r}
+lm_cnas_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(num_cnvs))
+```
+
+### SVs
+```{r}
+lm_svs_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(num.svs))
+```
+
+### Kataegis
+```{r}
+lm_kataegis_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(Kataegis_count))
+```
+
+### Mitochondrial CN
+```{r}
+lm_mito_cn_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) &
+                               !is.na(mtCN))
+```
+
+# Robust mixed effects models
+robustlmm package
+
+## PGA Clonal
+```{r}
+rlmer_pga_clonal <- rlmer(pga_clonal ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_pga_clonal_data)
+```
+
+```{r}
+summary(rlmer_pga_clonal)
+```
+
+
+#### Check model diagnostics with tests
+
+```{r}
+check_collinearity(rlmer_pga_clonal)
+# # check_normality(rlmer_pga_clonal)
+check_autocorrelation(rlmer_pga_clonal)
+check_heteroscedasticity(rlmer_pga_clonal)
+# check_outliers(rlmer_pga_clonal)
+```
+
+Partial residual plot to detect poor specification
+
+```{r}
+plot(rlmer_pga_clonal, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+car::qqPlot(residuals(rlmer_pga_clonal))
+```
+
+
+### model output table
+```{r}
+tab_model(rlmer_pga_clonal)
+```
+
+
+## PGA Subclonal
+```{r}
+rlmer_pga_subclonal <- rlmer(pga_subclonal ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_pga_subclonal_data)
+```
+
+```{r}
+summary(rlmer_pga_subclonal)
+```
+
+```{r}
+plot(rlmer_pga_subclonal, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+### model output table
+```{r}
+tab_model(rlmer_pga_subclonal)
+```
+
+## SNVs
+```{r}
+lm_snvs_data$num.SNVs_div100 <- lm_snvs_data$num.SNVs/100
+```
+
+```{r}
+rlmer_snvs <- rlmer(num.SNVs_div100 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_snvs_data)
+```
+
+```{r}
+summary(rlmer_snvs)
+```
+
+
+```{r}
+plot(rlmer_snvs, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+### model output table
+```{r}
+tab_model(rlmer_snvs)
+```
+
+## INDELs
+```{r}
+lm_indels_data$Tier_1.counts_div100 <- lm_indels_data$Tier_1.counts/100
+```
+```{r}
+rlmer_indels <- rlmer(Tier_1.counts_div100 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_indels_data)
+```
+
+```{r}
+summary(rlmer_indels)
+```
+
+
+```{r}
+plot(rlmer_indels, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+### model output table
+```{r}
+tab_model(rlmer_indels)
+```
+
+## CNAs
+
+```{r}
+rlmer_cnas <- rlmer(num_cnvs ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_cnas_data)
+```
+
+```{r}
+summary(rlmer_cnas)
+```
+
+```{r}
+plot(rlmer_cnas, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+### model output table
+```{r}
+tab_model(rlmer_cnas)
+```
+
+## SVs
+```{r}
+lm_svs_data$num.svs_div100 <- lm_svs_data$num.svs/100
+```
+```{r}
+rlmer_svs <- rlmer(num.svs_div100 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_svs_data)
+```
+
+```{r}
+summary(rlmer_svs)
+```
+
+```{r}
+plot(rlmer_svs, residuals = TRUE, residuals.line = TRUE)
+```
+
+### model output table
+```{r}
+tab_model(rlmer_svs)
+```
+
+## Kataegis
+
+```{r}
+rlmer_kataegis <- rlmer(Kataegis_count ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_kataegis_data)
+```
+
+```{r}
+summary(rlmer_kataegis)
+```
+
+
+```{r}
+plot(rlmer_kataegis, residuals = TRUE, residuals.line = TRUE)
+```
+
+### model output table
+```{r}
+tab_model(rlmer_kataegis)
+```
+
+## Mitochondrial CN
+
+```{r}
+rlmer_mtcn <- rlmer(mtCN ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_mito_cn_data)
+```
+
+```{r}
+summary(rlmer_mtcn)
+```
+
+
+```{r}
+plot(rlmer_mtcn, residuals = TRUE, residuals.line = TRUE)
+```
+
+### model output table
+```{r}
+tab_model(rlmer_mtcn)
+```
+
+
+## GI model p-value and coefficient table
+Make a table with all the p-values from the robustlmm GI models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_GI_outputs <- as.data.frame(matrix(nrow = 8, ncol = 12))
+colnames(rlmer_GI_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_GI_outputs$Model <- c("rlmer_pga_clonal", "rlmer_pga_subclonal", "rlmer_snvs", "rlmer_indels",
+                   "rlmer_cnas", "rlmer_svs", "rlmer_kataegis", "rlmer_mtcn")
+model_list <- list(rlmer_pga_clonal, rlmer_pga_subclonal, rlmer_snvs, rlmer_indels,
+                   rlmer_cnas, rlmer_svs, rlmer_kataegis, rlmer_mtcn)
+rlmer_GI_outputs$Variable <- c("pga_clonal","pga_subclonal","num.SNVs_div100","Tier_1.counts_div100","num_cnvs","num.svs_div100","Kataegis_count","mtCN")
+rlmer_GI_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                              "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                              "Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_GI_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_GI_outputs[i,3:11] <- model_dat[model_dat$Parameter == rlmer_GI_outputs$Measure[i],1:9]
+}
+
+rlmer_GI_outputs$measure_p_adj <- p.adjust(rlmer_GI_outputs$p, method = "BH")
+```
+
+```{r}
+model_list_GI <- model_list
+```
+
+
+```{r}
+rlmer_GI_outputs
+```
+
+```{r}
+dput(rlmer_GI_outputs)
+```
+
+Extract data and put in relevant slot
+
+## Mutational signatures
+### Data
+```{r}
+# SBS
+
+lm_SBS1_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS1) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS1_data$SBS1_div10 <- lm_SBS1_data$SBS1/10
+
+lm_SBS2_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS2) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS2_data$SBS2_div10 <- lm_SBS2_data$SBS2/10
+
+lm_SBS3_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS3) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS3_data$SBS3_div10 <- lm_SBS3_data$SBS3/10
+
+lm_SBS5_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS5) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS5_data$SBS5_div10 <- lm_SBS5_data$SBS5/10
+
+lm_SBS8_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS8) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS8_data$SBS8_div10 <- lm_SBS8_data$SBS8/10
+
+lm_SBS13_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS13) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS13_data$SBS13_div10 <- lm_SBS13_data$SBS13/10
+
+lm_SBS15_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS15) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS15_data$SBS15_div10 <- lm_SBS15_data$SBS15/10
+
+lm_SBS17a_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS17a) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS17a_data$SBS17a_div10 <- lm_SBS17a_data$SBS17a/10
+
+lm_SBS17b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS17b) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity) )
+lm_SBS17b_data$SBS17b_div10 <- lm_SBS17b_data$SBS17b/10
+
+lm_SBS18_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS18) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS18_data$SBS18_div10 <- lm_SBS18_data$SBS18/10
+
+lm_SBS21_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS21) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS21_data$SBS21_div10 <- lm_SBS21_data$SBS21/10
+
+lm_SBS22b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS22b) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS22b_data$SBS22b_div10 <- lm_SBS22b_data$SBS22b/10
+
+lm_SBS28_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS28) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS28_data$SBS28_div10 <- lm_SBS28_data$SBS28/10
+
+lm_SBS34_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS34) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS34_data$SBS34_div10 <- lm_SBS34_data$SBS34/10
+
+lm_SBS37_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS37) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS37_data$SBS37_div10 <- lm_SBS37_data$SBS37/10
+
+lm_SBS38_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS38) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS38_data$SBS38_div10 <- lm_SBS38_data$SBS38/10
+
+lm_SBS40a_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS40a) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS40a_data$SBS40a_div10 <- lm_SBS40a_data$SBS40a/10
+
+lm_SBS40b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS40b) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS40b_data$SBS40b_div10 <- lm_SBS40b_data$SBS40b/10
+
+lm_SBS44_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS44) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS44_data$SBS44_div10 <- lm_SBS44_data$SBS44/10
+
+lm_SBS52_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS52) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS52_data$SBS52_div10 <- lm_SBS52_data$SBS52/10
+
+lm_SBS54_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS54) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS54_data$SBS54_div10 <- lm_SBS54_data$SBS54/10
+
+lm_SBS96D_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS96D) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_SBS96D_data$SBS96D_div10 <- lm_SBS96D_data$SBS96D/10
+
+# ID
+lm_ID1_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID1) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID1_data$ID1_div10 <- lm_ID1_data$ID1/10
+
+lm_ID2_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID2) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID2_data$ID2_div10 <- lm_ID2_data$ID2/10
+
+lm_ID3_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID3) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID3_data$ID3_div10 <- lm_ID3_data$ID3/10
+
+lm_ID4_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID4) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID4_data$ID4_div10 <- lm_ID4_data$ID4/10
+
+lm_ID5_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID5) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID5_data$ID5_div10 <- lm_ID5_data$ID5/10
+
+lm_ID6_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID6) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID6_data$ID6_div10 <- lm_ID6_data$ID6/10
+
+lm_ID8_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID8) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID8_data$ID8_div10 <- lm_ID8_data$ID8/10
+
+lm_ID9_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID9) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID9_data$ID9_div10 <- lm_ID9_data$ID9/10
+
+lm_ID12_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID12) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID12_data$ID12_div10 <- lm_ID12_data$ID12/10
+
+lm_ID83C_data <- subset(hypoxia_signatures_tum_data_single, !is.na(ID83C) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_ID83C_data$ID83C_div10 <- lm_ID83C_data$ID83C/10
+```
+
+
+### Models
+#### SBS
+##### SBS1
+```{r}
+rlmer_SBS1 <- rlmer(SBS1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS1_data)
+```
+
+```{r}
+summary(rlmer_SBS1)
+```
+
+```{r}
+plot(rlmer_SBS1, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+```{r}
+tab_model(rlmer_SBS1)
+```
+
+##### SBS2
+```{r}
+rlmer_SBS2 <- rlmer(SBS2_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS2_data)
+```
+
+```{r}
+summary(rlmer_SBS2)
+```
+
+```{r}
+plot(rlmer_SBS2, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS2)
+```
+
+##### SBS3
+```{r}
+rlmer_SBS3 <- rlmer(SBS3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS3_data)
+```
+
+```{r}
+summary(rlmer_SBS3)
+```
+
+```{r}
+plot(rlmer_SBS3, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS3)
+```
+
+##### SBS5
+```{r}
+rlmer_SBS5 <- rlmer(SBS5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS5_data)
+```
+
+```{r}
+summary(rlmer_SBS5)
+```
+
+```{r}
+plot(rlmer_SBS5, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS5)
+```
+
+##### SBS8
+```{r}
+rlmer_SBS8 <- rlmer(SBS8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS8_data)
+```
+
+```{r}
+summary(rlmer_SBS8)
+```
+
+```{r}
+plot(rlmer_SBS8, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS8)
+```
+
+##### SBS13
+```{r}
+rlmer_SBS13 <- rlmer(SBS13_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS13_data)
+```
+
+```{r}
+summary(rlmer_SBS13)
+```
+
+```{r}
+plot(rlmer_SBS13, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS13)
+```
+
+##### SBS15
+```{r}
+rlmer_SBS15 <- rlmer(SBS15_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS15_data)
+```
+
+```{r}
+summary(rlmer_SBS15)
+```
+
+```{r}
+plot(rlmer_SBS15, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS15)
+```
+
+##### SBS17a
+```{r}
+rlmer_SBS17a <- rlmer(SBS17a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS17a_data)
+```
+
+```{r}
+summary(rlmer_SBS17a)
+```
+
+```{r}
+plot(rlmer_SBS17a, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS17a)
+```
+
+##### SBS17b
+```{r}
+rlmer_SBS17b <- rlmer(SBS17b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS17b_data)
+```
+
+```{r}
+summary(rlmer_SBS17b)
+```
+
+```{r}
+plot(rlmer_SBS17b, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS17b)
+```
+
+##### SBS18
+```{r}
+rlmer_SBS18 <- rlmer(SBS18_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS18_data)
+```
+
+```{r}
+summary(rlmer_SBS18)
+```
+
+```{r}
+plot(rlmer_SBS18, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS18)
+```
+
+##### SBS21
+```{r}
+rlmer_SBS21 <- rlmer(SBS21_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS21_data)
+```
+
+```{r}
+summary(rlmer_SBS21)
+```
+
+```{r}
+plot(rlmer_SBS21, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS21)
+```
+
+##### SBS22b
+```{r}
+rlmer_SBS22b <- rlmer(SBS22b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS22b_data)
+```
+
+```{r}
+summary(rlmer_SBS22b)
+```
+
+```{r}
+plot(rlmer_SBS22b, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS22b)
+```
+
+##### SBS28
+```{r}
+rlmer_SBS28 <- rlmer(SBS28_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS28_data)
+```
+
+```{r}
+summary(rlmer_SBS28)
+```
+
+```{r}
+plot(rlmer_SBS28, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS28)
+```
+
+##### SBS34
+```{r}
+rlmer_SBS34 <- rlmer(SBS34_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS34_data)
+```
+
+```{r}
+summary(rlmer_SBS34)
+```
+
+```{r}
+plot(rlmer_SBS34, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS34)
+```
+
+##### SBS37
+```{r}
+rlmer_SBS37 <- rlmer(SBS37_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS37_data)
+```
+
+```{r}
+summary(rlmer_SBS37)
+```
+
+```{r}
+plot(rlmer_SBS37, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS37)
+```
+
+##### SBS38
+```{r}
+rlmer_SBS38 <- rlmer(SBS38_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS38_data)
+```
+
+```{r}
+summary(rlmer_SBS38)
+```
+
+```{r}
+plot(rlmer_SBS38, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS38)
+```
+
+##### SBS40a
+```{r}
+rlmer_SBS40a <- rlmer(SBS40a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS40a_data)
+```
+
+```{r}
+summary(rlmer_SBS40a)
+```
+
+```{r}
+plot(rlmer_SBS40a, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS40a)
+```
+
+##### SBS40b
+```{r}
+rlmer_SBS40b <- rlmer(SBS40b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS40b_data)
+```
+
+```{r}
+summary(rlmer_SBS40b)
+```
+
+```{r}
+plot(rlmer_SBS40b, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS40b)
+```
+
+##### SBS44
+```{r}
+rlmer_SBS44 <- rlmer(SBS44_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS44_data)
+```
+
+```{r}
+summary(rlmer_SBS44)
+```
+
+```{r}
+plot(rlmer_SBS44, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS44)
+```
+
+##### SBS52
+```{r}
+rlmer_SBS52 <- rlmer(SBS52_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS52_data)
+```
+
+```{r}
+summary(rlmer_SBS52)
+```
+
+```{r}
+plot(rlmer_SBS52, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS52)
+```
+
+##### SBS54
+```{r}
+rlmer_SBS54 <- rlmer(SBS54_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS54_data)
+```
+
+```{r}
+summary(rlmer_SBS54)
+```
+
+```{r}
+plot(rlmer_SBS54, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS54)
+```
+
+##### SBS96D
+```{r}
+rlmer_SBS96D <- rlmer(SBS96D_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_SBS96D_data)
+```
+
+```{r}
+summary(rlmer_SBS96D)
+```
+
+```{r}
+plot(rlmer_SBS96D, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS96D)
+```
+
+#### SBS model p-value and coefficient table
+Make a table with all the p-values from the robustlmm SBS models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_SBS_outputs <- as.data.frame(matrix(nrow = 22, ncol = 12))
+colnames(rlmer_SBS_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_SBS_outputs$Model <- c("rlmer_SBS1",	"rlmer_SBS2",	"rlmer_SBS3",	"rlmer_SBS5",	"rlmer_SBS8",	
+                               "rlmer_SBS13",	"rlmer_SBS15",	"rlmer_SBS17a",	"rlmer_SBS17b",	"rlmer_SBS18",
+                               "rlmer_SBS21",	"rlmer_SBS22b",	"rlmer_SBS28",	"rlmer_SBS34",	"rlmer_SBS37",
+                               "rlmer_SBS38",	"rlmer_SBS40a",	"rlmer_SBS40b",	"rlmer_SBS44",	"rlmer_SBS52",
+                               "rlmer_SBS54",	"rlmer_SBS96D")
+model_list <- list(rlmer_SBS1,	rlmer_SBS2,	rlmer_SBS3,	rlmer_SBS5,	rlmer_SBS8,	
+                               rlmer_SBS13,	rlmer_SBS15,	rlmer_SBS17a,	rlmer_SBS17b,	rlmer_SBS18,
+                               rlmer_SBS21,	rlmer_SBS22b,	rlmer_SBS28,	rlmer_SBS34,	rlmer_SBS37,
+                               rlmer_SBS38,	rlmer_SBS40a,	rlmer_SBS40b,	rlmer_SBS44,	rlmer_SBS52,
+                               rlmer_SBS54,	rlmer_SBS96D)
+rlmer_SBS_outputs$Variable <- c("SBS1_div10",	"SBS2_div10",	"SBS3_div10",	"SBS5_div10",	"SBS8_div10",	
+                               "SBS13_div10",	"SBS15_div10",	"SBS17a_div10",	"SBS17b_div10",	"SBS18_div10",
+                               "SBS21_div10",	"SBS22b_div10",	"SBS28_div10",	"SBS34_div10",	"SBS37_div10",
+                               "SBS38_div10",	"SBS40a_div10",	"SBS40b_div10",	"SBS44_div10",	"SBS52_div10",
+                               "SBS54_div10",	"SBS96D_div10")
+rlmer_SBS_outputs$Measure <- c("Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_SBS_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_SBS_outputs[i,3:11] <- model_dat[model_dat$Parameter == rlmer_SBS_outputs$Measure[i],1:9]
+}
+
+rlmer_SBS_outputs$measure_p_adj <- p.adjust(rlmer_SBS_outputs$p, method = "BH")
+```
+
+```{r}
+rlmer_SBS_outputs
+```
+
+```{r}
+dput(rlmer_SBS_outputs)
+```
+
+```{r}
+model_list_SBS <- model_list
+```
+
+#### ID
+##### ID1
+```{r}
+rlmer_ID1 <- rlmer(ID1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID1_data)
+```
+
+```{r}
+summary(rlmer_ID1)
+```
+
+```{r}
+plot(rlmer_ID1, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID1)
+```
+
+##### ID2
+```{r}
+rlmer_ID2 <- rlmer(ID2_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID2_data)
+```
+
+```{r}
+summary(rlmer_ID2)
+```
+
+```{r}
+plot(rlmer_ID2, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID2)
+```
+
+##### ID3
+```{r}
+rlmer_ID3 <- rlmer(ID3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID3_data)
+```
+
+```{r}
+summary(rlmer_ID3)
+```
+
+```{r}
+plot(rlmer_ID3, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID3)
+```
+
+##### ID4
+```{r}
+rlmer_ID4 <- rlmer(ID4_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID4_data)
+```
+
+```{r}
+summary(rlmer_ID4)
+```
+
+```{r}
+plot(rlmer_ID4, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID4)
+```
+
+##### ID5
+```{r}
+rlmer_ID5 <- rlmer(ID5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID5_data)
+```
+
+```{r}
+summary(rlmer_ID5)
+```
+
+```{r}
+plot(rlmer_ID5, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID5)
+```
+
+##### ID6
+```{r}
+rlmer_ID6 <- rlmer(ID6_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID6_data)
+```
+
+```{r}
+summary(rlmer_ID6)
+```
+
+```{r}
+plot(rlmer_ID6, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID6)
+```
+
+##### ID8
+```{r}
+rlmer_ID8 <- rlmer(ID8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID8_data)
+```
+
+```{r}
+summary(rlmer_ID8)
+```
+
+```{r}
+plot(rlmer_ID8, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID8)
+```
+
+##### ID9
+```{r}
+rlmer_ID9 <- rlmer(ID9_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID9_data)
+```
+
+```{r}
+summary(rlmer_ID9)
+```
+
+```{r}
+plot(rlmer_ID9, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID9)
+```
+
+##### ID12
+```{r}
+rlmer_ID12 <- rlmer(ID12_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID12_data)
+```
+
+```{r}
+summary(rlmer_ID12)
+```
+
+```{r}
+plot(rlmer_ID12, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID12)
+```
+
+##### ID83C
+```{r}
+rlmer_ID83C <- rlmer(ID83C_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_ID83C_data)
+```
+
+```{r}
+summary(rlmer_ID83C)
+```
+
+```{r}
+plot(rlmer_ID83C, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID83C)
+```
+
+#### ID model p-value and coefficient table
+Make a table with all the p-values from the robustlmm ID models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_ID_outputs <- as.data.frame(matrix(nrow = 10, ncol = 12))
+colnames(rlmer_ID_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_ID_outputs$Model <- c("rlmer_ID1","rlmer_ID2","rlmer_ID3","rlmer_ID4","rlmer_ID5",
+                             "rlmer_ID6","rlmer_ID8","rlmer_ID9","rlmer_ID12","rlmer_ID83C")
+                             
+model_list <- list(rlmer_ID1,rlmer_ID2,rlmer_ID3,rlmer_ID4,rlmer_ID5,
+                             rlmer_ID6,rlmer_ID8,rlmer_ID9,rlmer_ID12,rlmer_ID83C)
+                             
+rlmer_ID_outputs$Variable <- c("ID1_div10","ID2_div10","ID3_div10","ID4_div10","ID5_div10",
+                             "ID6_div10","ID8_div10","ID9_div10","ID12_div10","ID83C_div10")
+
+rlmer_ID_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                              "Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+                             
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_ID_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_ID_outputs[i,3:11] <- model_dat[model_dat$Parameter == rlmer_ID_outputs$Measure[i],1:9]
+}
+
+rlmer_ID_outputs$measure_p_adj <- p.adjust(rlmer_ID_outputs$p, method = "BH")
+```
+
+```{r}
+rlmer_ID_outputs
+```
+
+```{r}
+dput(rlmer_ID_outputs)
+```
+
+```{r}
+model_list_ID <- model_list
+```
+
+#### CN Signatures
+##### Data
+```{r}
+lm_CX1_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX1_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX2_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX2_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX3_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX3_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX4_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX4_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX5_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX5_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX7_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX7_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX8_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX8_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+lm_CX11_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX11_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(Cellularity))
+```
+
+##### Models
+###### CX1
+```{r}
+rlmer_CX1 <- rlmer(CX1_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX1_data)
+```
+
+```{r}
+summary(rlmer_CX1)
+```
+
+```{r}
+plot(rlmer_CX1, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX1)
+```
+
+###### CX2
+```{r}
+rlmer_CX2 <- rlmer(CX2_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX2_data)
+```
+
+```{r}
+summary(rlmer_CX2)
+```
+
+```{r}
+plot(rlmer_CX2, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX2)
+```
+
+###### CX3
+```{r}
+rlmer_CX3 <- rlmer(CX3_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX3_data)
+```
+
+```{r}
+summary(rlmer_CX3)
+```
+
+```{r}
+plot(rlmer_CX3, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX3)
+```
+
+###### CX4
+```{r}
+rlmer_CX4 <- rlmer(CX4_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX4_data)
+```
+
+```{r}
+summary(rlmer_CX4)
+```
+
+```{r}
+plot(rlmer_CX4, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX4)
+```
+
+###### CX5
+```{r}
+rlmer_CX5 <- rlmer(CX5_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX5_data)
+```
+
+```{r}
+summary(rlmer_CX5)
+```
+
+```{r}
+plot(rlmer_CX5, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX5)
+```
+
+###### CX7
+```{r}
+rlmer_CX7 <- rlmer(CX7_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX7_data)
+```
+
+```{r}
+summary(rlmer_CX7)
+```
+
+```{r}
+plot(rlmer_CX7, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX7)
+```
+
+###### CX8
+```{r}
+rlmer_CX8 <- rlmer(CX8_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX8_data)
+```
+
+```{r}
+summary(rlmer_CX8)
+```
+
+```{r}
+plot(rlmer_CX8, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX8)
+```
+
+###### CX11
+```{r}
+rlmer_CX11 <- rlmer(CX11_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_CX11_data)
+```
+
+```{r}
+summary(rlmer_CX11)
+```
+
+```{r}
+plot(rlmer_CX11, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX11)
+```
+
+##### Output table
+Make a table with all the p-values from the robustlmm CX models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_CX_outputs <- as.data.frame(matrix(nrow = 8, ncol = 12))
+colnames(rlmer_CX_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_CX_outputs$Model <- c("rlmer_CX1","rlmer_CX2","rlmer_CX3","rlmer_CX4","rlmer_CX5",
+                             "rlmer_CX7","rlmer_CX8","rlmer_CX11")
+model_list <- list(rlmer_CX1,rlmer_CX2,rlmer_CX3,rlmer_CX4,rlmer_CX5,
+                             rlmer_CX7,rlmer_CX8,rlmer_CX11)
+rlmer_CX_outputs$Variable <- c("CX1_numbers","CX2_numbers","CX3_numbers","CX4_numbers","CX5_numbers",
+                             "CX7_numbers","CX8_numbers","CX11_numbers")
+rlmer_CX_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_CX_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_CX_outputs[i,3:11] <- model_dat[model_dat$Parameter == rlmer_CX_outputs$Measure[i],1:9]
+}
+
+rlmer_CX_outputs$measure_p_adj <- p.adjust(rlmer_CX_outputs$p, method = "BH")
+```
+
+```{r}
+rlmer_CX_outputs
+```
+
+```{r}
+dput(rlmer_CX_outputs)
+```
+
+```{r}
+model_list_CX <- model_list
+```
+
+# Non-Zero Robust mixed effects models
+robustlmm package
+
+## Mutational signatures
+### Models
+#### SBS
+##### SBS1
+```{r}
+rlmer_SBS1_nonzero <- rlmer(SBS1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS1_data, SBS1_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS1_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS1_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+
+```{r}
+tab_model(rlmer_SBS1_nonzero)
+```
+
+##### SBS2
+```{r}
+summary(subset(lm_SBS2_data, SBS2_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS2_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS2_div10 + (1|Studies), data = subset(lm_SBS2_data, SBS2_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS2_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS2_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS2_nonzero)
+```
+
+##### SBS3
+```{r}
+rlmer_SBS3_nonzero <- rlmer(SBS3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS3_data, SBS3_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS3_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS3_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS3_nonzero)
+```
+
+##### SBS5
+```{r}
+rlmer_SBS5_nonzero <- rlmer(SBS5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS5_data, SBS5_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS5_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS5_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS5_nonzero)
+```
+
+##### SBS8
+```{r}
+rlmer_SBS8_nonzero <- rlmer(SBS8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS8_data, SBS8_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS8_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS8_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS8_nonzero)
+```
+
+##### SBS13
+```{r}
+summary(subset(lm_SBS13_data, SBS13_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS13_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS13_div10 + (1|Studies), data = subset(lm_SBS13_data, SBS13_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS13_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS13_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS13_nonzero)
+```
+
+##### SBS15
+```{r}
+summary(subset(lm_SBS15_data, SBS15_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS15_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS15_div10 + (1|Studies), data = subset(lm_SBS15_data, SBS15_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS15_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS15_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS15_nonzero)
+```
+
+##### SBS17a
+```{r}
+summary(subset(lm_SBS17a_data, SBS17a_div10 > 0))
+```
+
+
+```{r}
+# rlmer_SBS17a_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS17a_div10 + (1|Studies), data = subset(lm_SBS17a_data, SBS17a_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS17a_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS17a_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS17a_nonzero)
+```
+
+##### SBS17b
+```{r}
+summary(subset(lm_SBS17b_data, SBS17b_div10 > 0))
+```
+
+
+```{r}
+# rlmer_SBS17b_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS17b_div10 + (1|Studies), data = subset(lm_SBS17b_data, SBS17b_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS17b_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS17b_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS17b_nonzero)
+```
+
+##### SBS18
+```{r}
+summary(subset(lm_SBS18_data, SBS18_div10 > 0))
+```
+
+
+```{r}
+rlmer_SBS18_nonzero <- rlmer(SBS18_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS18_data, SBS18_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS18_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS18_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS18_nonzero)
+```
+
+##### SBS21
+```{r}
+summary(subset(lm_SBS21_data, SBS21_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS21_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS21_div10 + (1|Studies), data = subset(lm_SBS21_data, SBS21_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS21_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS21_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS21_nonzero)
+```
+
+##### SBS22b
+```{r}
+# rlmer_SBS22b_nonzero <- rlmer(SBS22b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS22b_data, SBS22b_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS22b_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS22b_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS22b_nonzero)
+```
+
+##### SBS28
+```{r}
+summary(subset(lm_SBS28_data, SBS28_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS28_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS28_div10 + (1|Studies), data = subset(lm_SBS28_data, SBS28_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS28_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS28_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS28_nonzero)
+```
+
+##### SBS34
+```{r}
+rlmer_SBS34_nonzero <- rlmer(SBS34_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS34_data, SBS34_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS34_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS34_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS34_nonzero)
+```
+
+##### SBS37
+```{r}
+summary(subset(lm_SBS37_data, SBS37_div10 > 0))
+```
+
+
+```{r}
+rlmer_SBS37_nonzero <- rlmer(SBS37_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS37_data, SBS37_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS37_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS37_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS37_nonzero)
+```
+
+##### SBS38
+```{r}
+summary(subset(lm_SBS38_data, SBS38_div10 > 0))
+```
+
+
+```{r}
+# rlmer_SBS38_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS38_div10 + (1|Studies), data = subset(lm_SBS38_data, SBS38_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS38_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS38_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS38_nonzero)
+```
+
+##### SBS40a
+```{r}
+rlmer_SBS40a_nonzero <- rlmer(SBS40a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS40a_data, SBS40a_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS40a_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS40a_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS40a_nonzero)
+```
+
+##### SBS40b
+```{r}
+rlmer_SBS40b_nonzero <- rlmer(SBS40b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS40b_data, SBS40b_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS40b_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS40b_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS40b_nonzero)
+```
+
+##### SBS44
+```{r}
+summary(subset(lm_SBS44_data, SBS44_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS44_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS44_div10 + (1|Studies), data = subset(lm_SBS44_data, SBS44_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS44_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS44_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS44_nonzero)
+```
+
+##### SBS52
+```{r}
+summary(subset(lm_SBS52_data, SBS52_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS52_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS52_div10 + (1|Studies), data = subset(lm_SBS52_data, SBS52_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS52_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS52_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS52_nonzero)
+```
+
+##### SBS54
+```{r}
+rlmer_SBS54_nonzero <- rlmer(SBS54_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_SBS54_data, SBS54_div10 > 0))
+```
+
+```{r}
+summary(rlmer_SBS54_nonzero)
+```
+
+```{r}
+plot(rlmer_SBS54_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_SBS54_nonzero)
+```
+
+##### SBS96D
+```{r}
+summary(subset(lm_SBS96D_data, SBS96D_div10 > 0))
+```
+
+```{r}
+# rlmer_SBS96D_nonzero <- rlmer(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + Cellularity + SBS96D_div10 + (1|Studies), data = subset(lm_SBS96D_data, SBS96D_div10 > 0))
+```
+
+```{r}
+# summary(rlmer_SBS96D_nonzero)
+```
+
+```{r}
+# plot(rlmer_SBS96D_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+# tab_model(rlmer_SBS96D_nonzero)
+```
+
+#### SBS model p-value and coefficient table
+Make a table with all the p-values from the robustlmm SBS models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_SBS_outputs_nonzero <- as.data.frame(matrix(nrow = 10, ncol = 12))
+colnames(rlmer_SBS_outputs_nonzero) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_SBS_outputs_nonzero$Model <- c("rlmer_SBS1_nonzero",	
+                                     # "rlmer_SBS2_nonzero",	
+                                     "rlmer_SBS3_nonzero",	"rlmer_SBS5_nonzero",	"rlmer_SBS8_nonzero",	
+                               # "rlmer_SBS13_nonzero",	"rlmer_SBS15_nonzero",	"rlmer_SBS17a_nonzero",	"rlmer_SBS17b_nonzero",	
+                               "rlmer_SBS18_nonzero",
+                               # "rlmer_SBS21_nonzero",	
+                               # "rlmer_SBS22b_nonzero",	
+                               # "rlmer_SBS28_nonzero",	
+                               "rlmer_SBS34_nonzero",	"rlmer_SBS37_nonzero",
+                               # "rlmer_SBS38_nonzero",	
+                               "rlmer_SBS40a_nonzero",	"rlmer_SBS40b_nonzero",	
+                               # "rlmer_SBS44_nonzero",	
+                               # "rlmer_SBS52_nonzero",
+                               "rlmer_SBS54_nonzero"	#,"rlmer_SBS96D_nonzero"
+                               )
+model_list_nonzero <- list(rlmer_SBS1_nonzero,	
+                           # rlmer_SBS2_nonzero,	
+                           rlmer_SBS3_nonzero,	rlmer_SBS5_nonzero,	rlmer_SBS8_nonzero,	
+                               #rlmer_SBS13_nonzero,	rlmer_SBS15_nonzero,	rlmer_SBS17a_nonzero,	rlmer_SBS17b_nonzero,	
+                           rlmer_SBS18_nonzero,
+                               # rlmer_SBS21_nonzero,	
+                           # rlmer_SBS22b_nonzero,	
+                           # rlmer_SBS28_nonzero,	
+                           rlmer_SBS34_nonzero,	rlmer_SBS37_nonzero,
+                               # rlmer_SBS38_nonzero,	
+                           rlmer_SBS40a_nonzero,	rlmer_SBS40b_nonzero,	
+                           # rlmer_SBS44_nonzero,	
+                           # rlmer_SBS52_nonzero,
+                               rlmer_SBS54_nonzero#,	rlmer_SBS96D_nonzero
+                           )
+rlmer_SBS_outputs_nonzero$Variable <- c("SBS1_div10",	
+                                       # "SBS2_div10",	
+                                       "SBS3_div10",	"SBS5_div10",	"SBS8_div10",	
+                               #"SBS13_div10",	"SBS15_div10",	"SBS17a_div10",	"SBS17b_div10",	
+                               "SBS18_div10",
+                               # "SBS21_div10",	
+                               # "SBS22b_div10",	
+                               # "SBS28_div10",	
+                               "SBS34_div10",	"SBS37_div10",
+                               # "SBS38_div10",	
+                               "SBS40a_div10",	"SBS40b_div10",	
+                               # "SBS44_div10",	
+                               # "SBS52_div10",
+                               "SBS54_div10"#,	"SBS96D_div10"
+                               )
+rlmer_SBS_outputs_nonzero$Measure <- c("Buffa_signature_Sum_within",	
+                                       # "Buffa_signature_Sum_within",	
+                                       "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	
+                               #"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",	
+                               # "Buffa_signature_Sum_within",	
+                               # "Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	
+                               # "Buffa_signature_Sum_within",	
+                               # "Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within"#,	"Buffa_signature_Sum_within"
+                               )
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_SBS_outputs_nonzero)){
+
+  model <- model_list_nonzero[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_SBS_outputs_nonzero[i,3:11] <- model_dat[model_dat$Parameter == rlmer_SBS_outputs_nonzero$Measure[i],1:9]
+}
+
+rlmer_SBS_outputs_nonzero$measure_p_adj <- p.adjust(rlmer_SBS_outputs_nonzero$p, method = "BH")
+```
+
+```{r}
+rlmer_SBS_outputs_nonzero
+```
+
+```{r}
+dput(rlmer_SBS_outputs_nonzero)
+```
+
+```{r}
+model_list_nonzero_SBS <- model_list_nonzero
+```
+
+#### ID
+##### ID1
+```{r}
+rlmer_ID1_nonzero <- rlmer(ID1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID1_data, ID1_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID1_nonzero)
+```
+
+```{r}
+plot(rlmer_ID1_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID1_nonzero)
+```
+
+##### ID2
+```{r}
+rlmer_ID2_nonzero <- rlmer(ID2_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID2_data, ID2_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID2_nonzero)
+```
+
+```{r}
+plot(rlmer_ID2_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID2_nonzero)
+```
+
+##### ID3
+```{r}
+rlmer_ID3_nonzero <- rlmer(ID3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID3_data, ID3_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID3_nonzero)
+```
+
+```{r}
+plot(rlmer_ID3_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID3_nonzero)
+```
+
+##### ID4
+```{r}
+rlmer_ID4_nonzero <- rlmer(ID4_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID4_data, ID4_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID4_nonzero)
+```
+
+```{r}
+plot(rlmer_ID4_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID4_nonzero)
+```
+
+##### ID5
+```{r}
+rlmer_ID5_nonzero <- rlmer(ID5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID5_data, ID5_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID5_nonzero)
+```
+
+```{r}
+plot(rlmer_ID5_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID5_nonzero)
+```
+
+##### ID6
+```{r}
+rlmer_ID6_nonzero <- rlmer(ID6_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID6_data, ID6_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID6_nonzero)
+```
+
+```{r}
+plot(rlmer_ID6_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID6_nonzero)
+```
+
+##### ID8
+```{r}
+rlmer_ID8_nonzero <- rlmer(ID8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID8_data, ID8_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID8_nonzero)
+```
+
+```{r}
+plot(rlmer_ID8_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID8_nonzero)
+```
+
+##### ID9
+```{r}
+rlmer_ID9_nonzero <- rlmer(ID9_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID9_data, ID9_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID9_nonzero)
+```
+
+```{r}
+plot(rlmer_ID9_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID9_nonzero)
+```
+
+##### ID12
+```{r}
+rlmer_ID12_nonzero <- rlmer(ID12_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID12_data, ID12_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID12_nonzero)
+```
+
+```{r}
+plot(rlmer_ID12_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID12_nonzero)
+```
+
+##### ID83C
+```{r}
+rlmer_ID83C_nonzero <- rlmer(ID83C_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_ID83C_data, ID83C_div10 > 0))
+```
+
+```{r}
+summary(rlmer_ID83C_nonzero)
+```
+
+```{r}
+plot(rlmer_ID83C_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_ID83C_nonzero)
+```
+
+#### ID model p-value and coefficient table
+Make a table with all the p-values from the robustlmm ID models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_ID_outputs_nonzero <- as.data.frame(matrix(nrow = 10, ncol = 12))
+colnames(rlmer_ID_outputs_nonzero) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_ID_outputs_nonzero$Model <- c("rlmer_ID1_nonzero","rlmer_ID2_nonzero","rlmer_ID3_nonzero","rlmer_ID4_nonzero","rlmer_ID5_nonzero",
+                             "rlmer_ID6_nonzero","rlmer_ID8_nonzero","rlmer_ID9_nonzero","rlmer_ID12_nonzero","rlmer_ID83C_nonzero")
+model_list_nonzero <- list(rlmer_ID1_nonzero,rlmer_ID2_nonzero,rlmer_ID3_nonzero,rlmer_ID4_nonzero,rlmer_ID5_nonzero,
+                             rlmer_ID6_nonzero,rlmer_ID8_nonzero,rlmer_ID9_nonzero,rlmer_ID12_nonzero,rlmer_ID83C_nonzero)
+rlmer_ID_outputs_nonzero$Variable <- c("ID1_div10","ID2_div10","ID3_div10","ID4_div10","ID5_div10",
+                             "ID6_div10","ID8_div10","ID9_div10","ID12_div10","ID83C_div10")
+rlmer_ID_outputs_nonzero$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                                      "Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_ID_outputs_nonzero)){
+
+  model <- model_list_nonzero[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_ID_outputs_nonzero[i,3:11] <- model_dat[model_dat$Parameter == rlmer_ID_outputs_nonzero$Measure[i],1:9]
+}
+
+rlmer_ID_outputs_nonzero$measure_p_adj <- p.adjust(rlmer_ID_outputs_nonzero$p, method = "BH")
+```
+
+```{r}
+rlmer_ID_outputs_nonzero
+```
+
+```{r}
+dput(rlmer_ID_outputs_nonzero)
+```
+
+```{r}
+model_list_nonzero_ID <- model_list_nonzero
+```
+
+#### CN Signatures
+##### Models
+###### CX1
+```{r}
+rlmer_CX1_nonzero <- rlmer(CX1_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX1_data, CX1_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX1_nonzero)
+```
+
+```{r}
+plot(rlmer_CX1_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX1_nonzero)
+```
+
+###### CX2
+```{r}
+rlmer_CX2_nonzero <- rlmer(CX2_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX2_data, CX2_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX2_nonzero)
+```
+
+```{r}
+plot(rlmer_CX2_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX2_nonzero)
+```
+
+###### CX3
+```{r}
+rlmer_CX3_nonzero <- rlmer(CX3_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX3_data, CX3_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX3_nonzero)
+```
+
+```{r}
+plot(rlmer_CX3_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX3_nonzero)
+```
+
+###### CX4
+```{r}
+rlmer_CX4_nonzero <- rlmer(CX4_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX4_data, CX4_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX4_nonzero)
+```
+
+```{r}
+plot(rlmer_CX4_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX4_nonzero)
+```
+
+###### CX5
+```{r}
+rlmer_CX5_nonzero <- rlmer(CX5_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX5_data, CX5_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX5_nonzero)
+```
+
+```{r}
+plot(rlmer_CX5_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX5_nonzero)
+```
+
+###### CX7
+```{r}
+rlmer_CX7_nonzero <- rlmer(CX7_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX7_data, CX7_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX7_nonzero)
+```
+
+```{r}
+plot(rlmer_CX7_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX7_nonzero)
+```
+
+###### CX8
+```{r}
+rlmer_CX8_nonzero <- rlmer(CX8_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX8_data, CX8_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX8_nonzero)
+```
+
+```{r}
+plot(rlmer_CX8_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX8_nonzero)
+```
+
+###### CX11
+```{r}
+rlmer_CX11_nonzero <- rlmer(CX11_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = subset(lm_CX11_data, CX11_numbers > 0))
+```
+
+```{r}
+summary(rlmer_CX11_nonzero)
+```
+
+```{r}
+plot(rlmer_CX11_nonzero, residuals = TRUE, residuals.line = TRUE)
+```
+
+```{r}
+tab_model(rlmer_CX11_nonzero)
+```
+
+##### Output table
+Make a table with all the p-values from the robustlmm CX models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+rlmer_CX_outputs_nonzero <- as.data.frame(matrix(nrow = 8, ncol = 12))
+colnames(rlmer_CX_outputs_nonzero) <- c("Model","Measure","Parameter","Coefficient","SE","CI_low",
+                                        "CI_high","t","df_error","p","Effects","Variable")
+rlmer_CX_outputs_nonzero$Model <- c("rlmer_CX1_nonzero","rlmer_CX2_nonzero","rlmer_CX3_nonzero","rlmer_CX4_nonzero","rlmer_CX5_nonzero",
+                             "rlmer_CX7_nonzero","rlmer_CX8_nonzero","rlmer_CX11_nonzero")
+model_list_nonzero <- list(rlmer_CX1_nonzero,rlmer_CX2_nonzero,rlmer_CX3_nonzero,rlmer_CX4_nonzero,rlmer_CX5_nonzero,
+                             rlmer_CX7_nonzero,rlmer_CX8_nonzero,rlmer_CX11_nonzero)
+rlmer_CX_outputs_nonzero$Variable <- c("CX1_numbers","CX2_numbers","CX3_numbers","CX4_numbers","CX5_numbers",
+                             "CX7_numbers","CX8_numbers","CX11_numbers")
+rlmer_CX_outputs_nonzero$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                                      "Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(rlmer_CX_outputs_nonzero)){
+
+  model <- model_list_nonzero[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  rlmer_CX_outputs_nonzero[i,3:11] <- model_dat[model_dat$Parameter == rlmer_CX_outputs_nonzero$Measure[i],1:9]
+}
+
+rlmer_CX_outputs_nonzero$measure_p_adj <- p.adjust(rlmer_CX_outputs_nonzero$p, method = "BH")
+```
+
+```{r}
+rlmer_CX_outputs_nonzero
+```
+
+```{r}
+dput(rlmer_CX_outputs_nonzero)
+```
+
+```{r}
+model_list_nonzero_CX <- model_list_nonzero
+```
+
+# Save model outputs
+## Saving coefficient tables
+```{r}
+save(rlmer_GI_outputs,
+     rlmer_SBS_outputs,
+     rlmer_ID_outputs,
+     rlmer_CX_outputs,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_coefficient_tables_k10_rearranged_20241204.RData")
+```
+
+```{r}
+save(rlmer_SBS_outputs_nonzero,
+     rlmer_ID_outputs_nonzero,
+     rlmer_CX_outputs_nonzero,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_20241204.RData")
+```
+
+## Saving models
+```{r}
+save(model_list_GI,
+     model_list_SBS,
+     model_list_ID,
+     model_list_CX,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_models_k10_rearranged_20241204.RData")
+```
+
+```{r}
+save(model_list_nonzero_SBS,
+     model_list_nonzero_ID,
+     model_list_nonzero_CX,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_models_k10_rearranged_20241204.RData")
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
+
