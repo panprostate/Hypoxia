@@ -9,7 +9,7 @@ output:
     toc_depth: 6
 ---
 
-Analysis for figure 5 in Hypoxia manuscript December 2024.
+Analysis for figure 5 in Hypoxia manuscript March 2025.
 
 # Libraries used
 ```{r message=FALSE, warning=FALSE}
@@ -105,27 +105,12 @@ hypoxia_signatures_tum_data_single$PPCG_SampleID
 ```
 
 # Preparing survival data
-## Survival - overall
+
 ```{r}
 hist(hypoxia_signatures_tum_data_single$pga_clonal, breaks = 25)
 hist(hypoxia_signatures_tum_data_single$pga_subclonal, breaks = 25)
 hist((hypoxia_signatures_tum_data_single$pga_clonal + hypoxia_signatures_tum_data_single$pga_subclonal), breaks = 25)
 ```
-
-```{r}
-hypoxia_signatures_tum_data_single$status <- NA
-for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
-  if(is.na(hypoxia_signatures_tum_data_single$death_ind[i])){
-    
-  }else if(hypoxia_signatures_tum_data_single$death_ind[i] == "dead"){
-    hypoxia_signatures_tum_data_single$status[i] <- 1
-  }else{
-    hypoxia_signatures_tum_data_single$status[i] <- 0
-  }
-}
-hypoxia_signatures_tum_data_single$donor_interval_of_last_followup <- as.numeric(hypoxia_signatures_tum_data_single$donor_interval_of_last_followup)
-```
-
 
 ## Survival - relapse
 ```{r}
@@ -176,6 +161,10 @@ for(i in 1:nrow(hypoxia_signatures_tum_data_single)){
 }
 ```
 
+```{r}
+median(hypoxia_signatures_tum_data_single$pga_total, na.rm = TRUE)
+```
+
 ## Preparing data for FinalFit
 ```{r}
 hypoxia_signatures_tum_data_single$pga_status <- as.factor(hypoxia_signatures_tum_data_single$pga_status)
@@ -195,97 +184,12 @@ hypoxia_signatures_tum_data_single <- ff_relabel(hypoxia_signatures_tum_data_sin
 ```
 
 ```{r}
-dependent_os  <- "Surv(donor_interval_of_last_followup, status)"
 dependent_relapse <- "Surv(donor_relapse_interval, status_relapse)"
 dependent_mets <- "Surv(donor_first_mets_interval_from_m0, status_mets)"
 
 explanatory_cel   <- c("Buffa_signature_Sum_within", "pga_total", "age_at_tumour_collection", "ISUP_Grade", "Cellularity")
 explanatory_quart_bin_rest_cel   <- c("Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin", "pga_status", "age_at_tumour_collection", "ISUP_Grade","Cellularity")
 
-hypoxia_signatures_tum_data_single %>% 
-    finalfit(dependent_os, explanatory_cel)
-```
-
-## Overall Survival
-Get sample numbers
-```{r}
-full_os <- coxph(Surv(donor_interval_of_last_followup, status) ~ Buffa_signature_Sum_within + pga_total + age_at_tumour_collection + ISUP_Grade + Cellularity, 
-      data = hypoxia_signatures_tum_data_single)
-```
-
-```{r}
-full_os
-```
-
-```{r}
-full_os <- coxph(Surv(donor_interval_of_last_followup, status) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin + pga_status + age_at_tumour_collection + ISUP_Grade + Cellularity, 
-      data = hypoxia_signatures_tum_data_single)
-```
-
-```{r}
-full_os
-```
-
-### Final fit
-
-```{r}
-hypoxia_signatures_tum_data_single %>% 
-    finalfit(dependent_os, explanatory_cel, add_dependent_label = FALSE) %>% 
-    rename("Overall survival" = label) %>% 
-    rename(" " = levels) %>% 
-    rename("  " = all) %>%
-  xtable()
-```
-```{r}
-hypoxia_signatures_tum_data_single %>%
-  hr_plot(dependent_os, explanatory_cel,
-          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
-                         geom_errorbarh(height=0.2), 
-                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
-          column_space = c(-1,0.2,1.5))
-```
-
-```{r}
-hypoxia_signatures_tum_data_single %>% 
-    finalfit(dependent_os, explanatory_quart_bin_rest_cel, add_dependent_label = FALSE) %>% 
-    rename("Overall survival" = label) %>% 
-    rename(" " = levels) %>% 
-    rename("  " = all) %>%
-  xtable()
-```
-```{r}
-os_q4_rest_cel <- hypoxia_signatures_tum_data_single %>% 
-  hr_plot(dependent_os, explanatory_quart_bin_rest_cel,
-          plot_opts=list(geom_point(aes(size = Total), shape = 22, fill = "white"), 
-                         geom_errorbarh(height=0.2), 
-                         geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
-          column_space = c(-1,0.2,1.5),
-          dependent_label = "A. Overall Survival")
-plot(os_q4_rest_cel)
-```
-
-```{r}
-hypoxia_signatures_tum_data_single %>% 
-    coxphmulti(dependent_os, explanatory_cel) %>% 
-    cox.zph() %>% 
-    {zph_result <<- .} %>% 
-    plot()
-```
-
-```{r}
-zph_result
-```
-
-```{r}
-hypoxia_signatures_tum_data_single %>% 
-    coxphmulti(dependent_os, explanatory_quart_bin_rest_cel) %>% 
-    cox.zph() %>% 
-    {zph_result <<- .} %>% 
-    plot()
-```
-
-```{r}
-zph_result
 ```
 
 ## Relapse free survival
@@ -342,7 +246,7 @@ rfs_q4_rest_cel <- hypoxia_signatures_tum_data_single %>%
                          geom_errorbarh(height=0.2), 
                          geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
           column_space = c(-1,0.2,1.5), 
-          dependent_label = "B. Relapse Free Survival")
+          dependent_label = "C. Relapse Free Survival")
 plot(rfs_q4_rest_cel)
 ```
 
@@ -424,7 +328,7 @@ mfs_q4_rest_cel <- hypoxia_signatures_tum_data_single %>%
                          geom_errorbarh(height=0.2), 
                          geom_vline(xintercept = 1, linetype = 1, alpha = 0.5, colour = "grey")),
           column_space = c(-1,0.2,1.5),
-          dependent_label = "C. Metastasis Free Survival")
+          dependent_label = "D. Metastasis Free Survival")
 plot(mfs_q4_rest_cel)
 ```
 
@@ -452,11 +356,69 @@ hypoxia_signatures_tum_data_single %>%
 zph_result
 ```
 
-# Combined CoxPH plot
+# Kaplan-Meier curves
+```{r}
+rel_lr <- survdiff(Surv(donor_relapse_interval,
+                                                                         status_relapse) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin,
+                                                                    data=hypoxia_signatures_tum_data_single)
+rel_lr
+```
 
 ```{r fig.height=10, fig.width=8}
-grid.arrange(os_q4_rest_cel, rfs_q4_rest_cel, mfs_q4_rest_cel,
-             nrow = 3)
+surv_rel_hypoxia <- survfit2(Surv(donor_relapse_interval, status_relapse) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin, 
+                             data = hypoxia_signatures_tum_data_single)
+
+hypoxia_rel_bin <- ggsurvfit(surv_rel_hypoxia) +
+  labs(
+    x = "Days",
+    y = "Relapse free survival probability"
+    ) + 
+  # add_confidence_interval() +
+  # add_risktable()+
+  scale_colour_manual(values = c("#3E6F84","#AE4C2C"))+
+  scale_fill_manual(values = c("#3E6F84","#AE4C2C"))+
+  # guides(colour=guide_legend(nrow=2,byrow=TRUE))+
+  labs(tag = "A. ")+ 
+  annotate("text", y = 0.95, x = 3000, label = c(paste0("log-rank p = ", 
+                                                     format(rel_lr[[6]], scientific = TRUE, digits = 3))))
+hypoxia_rel_bin
+```
+
+```{r}
+mfs_lr <- survdiff(Surv(donor_first_mets_interval_from_m0,status_mets) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin,
+                   data=hypoxia_signatures_tum_data_single)
+mfs_lr
+```
+
+
+```{r fig.height=10, fig.width=8}
+surv_met_hypoxia <- survfit2(Surv(donor_first_mets_interval_from_m0, status_mets) ~ Buffa_signature_Sum_within_quartile_one_sample_per_donor_bin, 
+                             data = hypoxia_signatures_tum_data_single)
+
+hypoxia_mfs_bin <- ggsurvfit(surv_met_hypoxia) +
+  labs(
+    x = "Days",
+    y = "Metastasis free survival probability"
+    ) + 
+  # add_confidence_interval() +
+  # add_risktable()+
+  scale_colour_manual(values = c("#3E6F84","#AE4C2C"))+
+  scale_fill_manual(values = c("#3E6F84","#AE4C2C"))+
+  # guides(colour=guide_legend(nrow=2,byrow=TRUE))+
+  labs(tag = "B. ")+ 
+  annotate("text", y = 0.98, x = 3000, label = c(paste0("log-rank p = ", 
+                                                     format(mfs_lr[[6]], scientific = TRUE, digits = 3))))
+hypoxia_mfs_bin
+```
+
+# Combined CoxPH plot
+
+```{r fig.height=10, fig.width=7}
+grid.arrange(hypoxia_rel_bin, hypoxia_mfs_bin,
+             rfs_q4_rest_cel, mfs_q4_rest_cel, 
+             nrow = 3, ncol = 4, layout_matrix = rbind(c(1,2),
+                                                       c(3,3),
+                                                       c(4,4)))
 ```
 
 
