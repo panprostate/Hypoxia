@@ -1,5 +1,5 @@
 ---
-title: "Manuscript Dec 2024, Figure 1. RNA data release 1.4k10prerelease"
+title: "Manuscript Revision, Figure 1. RNA data release 1.4k10prerelease"
 author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
@@ -9,7 +9,7 @@ output:
     toc_depth: 6
 ---
 
-Analysis for figure 1 in Hypoxia manuscript December 2024.
+Analysis for figure 1 in Hypoxia manuscript revision.
 
 # Libraries used
 ```{r message=FALSE, warning=FALSE}
@@ -44,7 +44,10 @@ params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHu
                evofeatures = "/mnt/bmh01-rds/UoOxford_David_W/shared/ICGC_UK_RNA/ppcg_subtyping_weagles_nadiah_15112021.csv",
                rel_cna = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/CNA_ANNOTATIONS__2023-09-13_release4/relative_cna_table_by_gene_pam.tsv",
                total_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_coefficient_tables_k10_rearranged_20241204.RData",
-               nonzero_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_20241204.RData")
+               nonzero_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_20241204.RData",
+               driver_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drivers_continuous_hypoxia_binomial_glm_summary_revisions.txt",
+               driver_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drivers_quartile_hypoxia_binomial_glm_summary_revisions.txt",
+               gene_set_bionm_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/gene_set_hypoxia_binomial_glm_summary_revisions.txt")
 ```
 
 ```{r}
@@ -151,6 +154,31 @@ combined_data$Cribriform_Intraductal_Y_N[combined_data$Cribriform_Intraductal_Y_
 combined_data$Cribriform_Intraductal_Y_N[combined_data$Cribriform_Intraductal_Y_N == "N"] <- "No IDC"
 combined_data$Cribriform_Intraductal_Y_N <- as.factor(combined_data$Cribriform_Intraductal_Y_N)
 combined_data$Cribriform_Intraductal_Y_N <- factor(combined_data$Cribriform_Intraductal_Y_N, levels = c("No IDC","IDC"))
+```
+
+### Binomial model coefficients
+Read in coefficients from binomial models that account for total mutation burden when looking at relationship between hypoxia and driver mutations
+
+glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs), family = binomial, data = sub_data)
+
+```{r}
+drivers_continuous_coefficients <- read.delim(params$driver_continuous_coefs, header = TRUE)
+rownames(drivers_continuous_coefficients) <- drivers_continuous_coefficients$Gene
+drivers_continuous_coefficients$Significance <- ifelse(drivers_continuous_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+drivers_quartile_coefficients <- read.delim(params$driver_quartile_coefs, header = TRUE)
+rownames(drivers_quartile_coefficients) <- drivers_quartile_coefficients$Gene
+drivers_quartile_coefficients$Significance <- ifelse(drivers_quartile_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+gene_sets_binom_coefficients <- read.delim(params$gene_set_bionm_coefs, header = TRUE)
+rownames(gene_sets_binom_coefficients) <- gene_sets_binom_coefficients$mutation_set
+gene_sets_binom_coefficients$Score_Significance <- ifelse(gene_sets_binom_coefficients$Score_p <= 0.05, yes = "Significant", no = "N.S.")
+gene_sets_binom_coefficients$Quart_Significance <- ifelse(gene_sets_binom_coefficients$Quart_p <= 0.05, yes = "Significant", no = "N.S.")
+
 ```
 
 
@@ -397,6 +425,17 @@ xtable(patient_stat_table,
 
 
 # Drivers
+
+## Coefficients from binomial models
+```{r}
+drivers_continuous_coefficients
+```
+
+```{r}
+drivers_quartile_coefficients
+```
+
+
 
 Preparing analysis and plotting of driver data as a heatmap/oncoprint. 
 
@@ -1110,20 +1149,36 @@ all_coefficients_total <- c(rlmer_CX_outputs$Coefficient,
 all_coefficients_nonzero <- c(rlmer_CX_outputs_nonzero$Coefficient,
                       rlmer_ID_outputs_nonzero$Coefficient,
                       rlmer_SBS_outputs_nonzero$Coefficient)
+all_coefficients_driver_bin_cont <- c(drivers_continuous_coefficients$Hypoxia_coefficient)
+all_coefficients_driver_bin_quart <- c(drivers_quartile_coefficients$Hypoxia_coefficient)
+all_coefficients_combined_bin_cont <- c(gene_sets_binom_coefficients$Score_coef)
+all_coefficients_combined_bin_quart <- c(gene_sets_binom_coefficients$Quart_coef)
 ```
 ```{r}
-coefficient_colours_total <- colorRamp2(c(min(all_coefficients_total, na.rm = TRUE),
-                                    -0.0000000001,
+coefficient_colours_total <- colorRamp2(c(-1,
+                                          0.0000000001,
                                     0,
                                     0.0000000001,
                                     0.5,
                                     1,
                                     max(all_coefficients_total, na.rm = TRUE)),
-                                  c("purple1","lavender","white","lightyellow","gold","orange1","red"))
-coefficient_colours_nonzero <- colorRamp2(c(min(all_coefficients_nonzero, na.rm = TRUE),
+                                  c("purple4","lavender","white","lightyellow","gold","orange1","red"))
+coefficient_colours_nonzero <- colorRamp2(c(-1,
                                     0,
                                     max(all_coefficients_nonzero, na.rm = TRUE)),
                                   c("royalblue","white","firebrick"))
+coefficient_colours_drivers_cont <- colorRamp2(c(min(c(all_coefficients_driver_bin_cont,
+                                                  all_coefficients_combined_bin_cont), na.rm = TRUE),
+                                    0,
+                                    max(c(all_coefficients_driver_bin_cont,
+                                          all_coefficients_combined_bin_cont), na.rm = TRUE)),
+                                  c("grey20","white","firebrick"))
+coefficient_colours_drivers_quart <- colorRamp2(c(min(c(all_coefficients_driver_bin_quart,
+                                                  all_coefficients_combined_bin_quart), na.rm = TRUE),
+                                    0,
+                                    max(c(all_coefficients_driver_bin_quart,
+                                          all_coefficients_combined_bin_quart), na.rm = TRUE)),
+                                  c("grey20","white","firebrick"))
 ```
 
 ### SBS annotations
@@ -1177,14 +1232,14 @@ rlmer_SBS_annotations <- rlmer_SBS_annotations[sbs_sig_columns,]
 ```
 
 ```{r}
-sbs_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_SBS_annotations$Significance_total,
-                                         "Coefficient" = rlmer_SBS_annotations$Coefficient_total,
-                                         "Non-zero robustlmm" = rlmer_SBS_annotations$Significance_nonzero,
-                                         "Non-zero Coefficient" = rlmer_SBS_annotations$Coefficient_nonzero,
-                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
-                                                    "Coefficient" = coefficient_colours_total,
-                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
-                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+sbs_row_annotation_right <- rowAnnotation("robustlmm Signif" = rlmer_SBS_annotations$Significance_total,
+                                         "robustlmm Coef" = rlmer_SBS_annotations$Coefficient_total,
+                                         "N-Z robustlmm Signif" = rlmer_SBS_annotations$Significance_nonzero,
+                                         "N-Z robustlmm Coef" = rlmer_SBS_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm Signif" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "robustlmm Coef" = coefficient_colours_total,
+                                                    "N-Z robustlmm Signif" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "N-Z robustlmm Coef" = coefficient_colours_nonzero),
                            show_annotation_name = FALSE)
 ```
 
@@ -1238,14 +1293,14 @@ rlmer_ID_annotations <- rlmer_ID_annotations[id_sig_columns,]
 ```
 
 ```{r}
-id_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_ID_annotations$Significance_total,
-                                         "Coefficient" = rlmer_ID_annotations$Coefficient_total,
-                                         "Non-zero robustlmm" = rlmer_ID_annotations$Significance_nonzero,
-                                         "Non-zero Coefficient" = rlmer_ID_annotations$Coefficient_nonzero,
-                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
-                                                    "Coefficient" = coefficient_colours_total,
-                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
-                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+id_row_annotation_right <- rowAnnotation("robustlmm Signif" = rlmer_ID_annotations$Significance_total,
+                                         "robustlmm Coef" = rlmer_ID_annotations$Coefficient_total,
+                                         "N-Z robustlmm Signif" = rlmer_ID_annotations$Significance_nonzero,
+                                         "N-Z robustlmm Coef" = rlmer_ID_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm Signif" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "robustlmm Coef" = coefficient_colours_total,
+                                                    "N-Z robustlmm Signif" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "N-Z robustlmm Coef" = coefficient_colours_nonzero),
                            show_annotation_name = FALSE)
 ```
 
@@ -1300,16 +1355,18 @@ rlmer_CX_annotations <- rlmer_CX_annotations[cx_sig_columns,]
 ```
 
 ```{r}
-cx_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_CX_annotations$Significance_total,
-                                         "Coefficient" = rlmer_CX_annotations$Coefficient_total,
-                                         "Non-zero robustlmm" = rlmer_CX_annotations$Significance_nonzero,
-                                         "Non-zero Coefficient" = rlmer_CX_annotations$Coefficient_nonzero,
-                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
-                                                    "Coefficient" = coefficient_colours_total,
-                                                    "Non-zero robustlmm" = c("Significant" = "coral", "Not Significant" = "grey"),
-                                                    "Non-zero Coefficient" = coefficient_colours_nonzero),
+cx_row_annotation_right <- rowAnnotation("robustlmm Signif" = rlmer_CX_annotations$Significance_total,
+                                         "robustlmm Coef" = rlmer_CX_annotations$Coefficient_total,
+                                         "N-Z robustlmm Signif" = rlmer_CX_annotations$Significance_nonzero,
+                                         "N-Z robustlmm Coef" = rlmer_CX_annotations$Coefficient_nonzero,
+                                         col = list("robustlmm Signif" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "robustlmm Coef" = coefficient_colours_total,
+                                                    "N-Z robustlmm Signif" = c("Significant" = "coral", "Not Significant" = "grey"),
+                                                    "N-Z robustlmm Coef" = coefficient_colours_nonzero),
                                          annotation_name_rot = 45)
 ```
+
+
 
 
 ## Preparing GI heatmap data
@@ -1356,10 +1413,10 @@ rlmer_GI_annotations$Significance <- ifelse(rlmer_GI_annotations$measure_p_adj <
 
 
 ```{r}
-gi_row_annotation_right <- rowAnnotation("robustlmm" = rlmer_GI_annotations$Significance,
-                                         "Coefficient" = rlmer_GI_annotations$Coefficient,
-                                         col = list("robustlmm" = c("Significant" = "indianred", "Not Significant" = "grey"),
-                                                    "Coefficient" = coefficient_colours_total),
+gi_row_annotation_right <- rowAnnotation("robustlmm Signif" = rlmer_GI_annotations$Significance,
+                                         "robustlmm Coef" = rlmer_GI_annotations$Coefficient,
+                                         col = list("robustlmm Signif" = c("Significant" = "indianred", "Not Significant" = "grey"),
+                                                    "robustlmm Coef" = coefficient_colours_total),
                                           show_annotation_name = FALSE)
 ```
 
@@ -1493,8 +1550,9 @@ ha_drg36_significance_annotation <- rowAnnotation("Q1 v Q4" = drg36_hypoxia_enri
                                                               "Mutated v Not" = c("Significant" = "gold", "N.S." = "grey")))
 
 ha_cna_significance_annotation <- rowAnnotation("Q1 v Q4" = cna_hypoxia_enrichment_quart_sub$Significance,
-                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey")),
-                                                   show_annotation_name = FALSE)
+                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod4", "N.S." = "grey")),
+                                                   show_annotation_name = TRUE,
+                                                annotation_name_rot = 45)
 ```
 
 ```{r}
@@ -1536,12 +1594,28 @@ mut_sets_annotation$mut_v_not_significance <- ifelse(mut_sets_annotation$mut_v_n
 ```
 
 ```{r}
-ha_mut_sets_annotation <- rowAnnotation("Q1 v Q4" = mut_sets_annotation[,"q1_v_q4_significance"],
-                                                   "Mutated v Not" = mut_sets_annotation[,"mut_v_not_significance"],
-                                                   col = list("Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey"),
-                                                              "Mutated v Not" = c("Significant" = "gold", "N.S." = "grey")),
+ha_mut_sets_annotation <- rowAnnotation("Score Coef" = gene_sets_binom_coefficients$Score_coef,
+                                         "Score Signif" = gene_sets_binom_coefficients$Score_Significance,
+                                         "Quartile Coef" = gene_sets_binom_coefficients$Quart_coef,
+                                         "Quartile Signif" = gene_sets_binom_coefficients$Quart_Significance,
+                                         col = list("Score Coef" = coefficient_colours_drivers_cont,
+                                                    "Score Signif" = c("Significant" = "goldenrod", "N.S." = "grey"),
+                                                    "Quartile Coef" = coefficient_colours_drivers_quart,
+                                                    "Quartile Signif" = c("Significant" = "goldenrod", "N.S." = "grey")),
                                                    show_annotation_name = TRUE,
                                         annotation_name_rot = 45)
+```
+
+```{r}
+driver_row_annotation_right <- rowAnnotation("Score Coef" = drivers_continuous_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+                                         "Score Signif" = drivers_continuous_coefficients[c(driver_top10_genes),]$Significance,
+                                         "Quartile Coef" = drivers_quartile_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+                                         "Quartile Signif" = drivers_quartile_coefficients[c(driver_top10_genes),]$Significance,
+                                         col = list("Score Coef" = coefficient_colours_drivers_cont,
+                                                    "Score Signif" = c("Significant" = "gold", "N.S." = "grey"),
+                                                    "Quartile Coef" = coefficient_colours_drivers_quart,
+                                                    "Quartile Signif" = c("Significant" = "gold", "N.S." = "grey")),
+                                         show_annotation_name = FALSE)
 ```
 
 ## Genomic Instability heatmap
@@ -1560,7 +1634,7 @@ gen_inst_heatmap <- Heatmap(log10(gi_mat),
 driver_mut_heatmap <- Heatmap(driver_mat[driver_top10_genes,],
                               name = "Driver Mutations",
                               # bottom_annotation = ha_row_annotation_bottom,
-                              right_annotation = ha_driver_significance_annotation,
+                              right_annotation = driver_row_annotation_right,
                               show_column_names = FALSE,
                               column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
                               col = mutation_colours,
@@ -1641,7 +1715,7 @@ ht_list = driver_cn_heatmap %v% driver_mut_heatmap %v% drg_mut_heatmap %v% gen_i
 ```
 
 ```{r fig.height=20, fig.width=17}
-draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(2, 2, 24, 2, 2, 2), "mm"))
+draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(20, 2, 24, 2, 2, 2), "mm"))
 ```
 
 # Supplementary figures

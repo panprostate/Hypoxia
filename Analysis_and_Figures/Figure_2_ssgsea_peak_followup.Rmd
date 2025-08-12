@@ -63,7 +63,7 @@ hypoxia_signatures_tum_data_single$age_bracket <- factor(hypoxia_signatures_tum_
 ## ssGSEA
 
 ```{r}
-ssgsea_hallmark <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/ssgsea_hallmark_gs_2024-08-27.txt")
+ssgsea_hallmark <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/revised_ssgsea_hallmark_gs_2025-06-17.txt")
 ```
 
 ```{r}
@@ -161,6 +161,11 @@ Make a column that matches expression matrix gene name
 peak1_gene_list$ID_SYMBOL <- peak1_gene_list$hgnc_symbol
 ```
 
+```{r}
+peak1_gene_list
+```
+
+
 ## Peak 2 
 Check status of genes in PRPS data
 ```{r}
@@ -200,6 +205,10 @@ peak2_gene_list <- merge(peak2_gene_list,
 Make a column that matches expression matrix gene name
 ```{r}
 peak2_gene_list$ID_SYMBOL <- peak2_gene_list$hgnc_symbol
+```
+
+```{r}
+peak2_gene_list
 ```
 
 
@@ -285,6 +294,51 @@ peak1_unscaled <- peak_score(rna_dat_k10, annotation = "ID_SYMBOL", gene_list = 
 hist(peak1_unscaled$Peak1_average, breaks = 25)
 ```
 
+### Calculate Peak1 without KIF4A
+```{r}
+peak1_unscaled_noKIF4A <- peak_score(rna_dat_k10, annotation = "ID_SYMBOL", gene_list = peak1_gene_list[-which(peak1_gene_list$SYMBOL == "KIF4A"),], scaling = FALSE, peak_number = "Peak1")
+```
+
+```{r}
+hist(peak1_unscaled_noKIF4A$Peak1_average, breaks = 25)
+```
+
+Compare
+```{r}
+colnames(peak1_unscaled) <- paste0(colnames(peak1_unscaled),"_complete")
+peak1_comparison <- merge(peak1_unscaled, peak1_unscaled_noKIF4A, by.x = "Sample_complete", by.y = "Sample")
+```
+
+```{r}
+ggplot(peak1_comparison, aes(x = Peak1_average_complete, y = Peak1_average))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  xlab("Peak 1 Complete Gene List")+
+  ylab("Peak 1 Without KIF4A")+
+  theme_light()
+```
+
+```{r}
+ggplot(peak1_comparison, aes(x = Peak1_average_complete, y = Peak1_average))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  xlab("Peak 1 Complete Gene List")+
+  ylab("Peak 1 Without KIF4A")+
+  theme_light()+
+  annotate("text", label = paste0("Spearman's ρ = ",
+                                 round(cor.test(peak1_comparison$Peak1_average_complete, 
+                                                peak1_comparison$Peak1_average, method = "spearman")[[4]], digits = 3),
+                                 "; p = ",
+            format(cor.test(peak1_comparison$Peak1_average_complete, 
+                            peak1_comparison$Peak1_average, method = "spearman")[[3]], scientific = TRUE, digits = 3)), 
+           x = -1, y = 1.5, colour = "black")
+```
+
+```{r}
+cor.test(peak1_comparison$Peak1_average_complete, peak1_comparison$Peak1_average, method = "spearman")
+```
+
+
 ## Peak2
 ```{r}
 peak2_unscaled <- peak_score(rna_dat_k10, annotation = "ID_SYMBOL", gene_list = peak2_gene_list, scaling = FALSE, peak_number = "Peak2")
@@ -302,7 +356,7 @@ ssgsea_hallmark_hypoxia <- merge(hypoxia_signatures_tum_data_single,
                                  by.x = "PPCG_RNA_Assay_ID",
                                  by.y = "sample")
 ssgsea_hallmark_hypoxia <- merge(ssgsea_hallmark_hypoxia,
-                                 peak1_unscaled,
+                                 peak1_unscaled_noKIF4A,
                                  by.x = "PPCG_RNA_Assay_ID",
                                  by.y = "Sample")
 ssgsea_hallmark_hypoxia <- merge(ssgsea_hallmark_hypoxia,

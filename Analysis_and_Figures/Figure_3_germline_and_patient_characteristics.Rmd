@@ -9,7 +9,7 @@ output:
     toc_depth: 6
 ---
 
-Analysis for figure 3 in Hypoxia manuscript December 2024.
+Analysis for figure 3 in Hypoxia manuscript revisions.
 
 # Libraries used
 ```{r message=FALSE, warning=FALSE}
@@ -45,7 +45,15 @@ params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHu
                germline_tier_1_sample_list = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Germline/20240716_PPCG_Germline_Data_Globus/20240716_PPCG_Germline_Data_Tier1_samples_vs_gene_lists.txt",
                germline_tier_1_sample_gene = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Germline/20240716_PPCG_Germline_Data_Globus/20240716_PPCG_Germline_Data_Tier1_genes_vs_samples.txt",
                timing_trajectories = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/Chris_trajectories/evolutionary_orderings_210824/PPCG_selected_primary_samples_sample_groups_G3.Rdata",
-               drivers = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__allGenes.txt")
+               drivers = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__allGenes.txt",
+               hallmark_hypoxia_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/hallmark_hypoxia_quartile_hypoxia_binomial_glm_summary_revisions.txt",
+               hallmark_hypoxia_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/hallmark_hypoxia_continuous_hypoxia_binomial_glm_summary_revisions.txt",
+               drg36_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drg128s_quartile_hypoxia_binomial_glm_summary_revisions.txt",
+               drg36_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drg36s_continuous_hypoxia_binomial_glm_summary_revisions.txt",
+               drg128_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drg128s_quartile_hypoxia_binomial_glm_summary_revisions.txt",
+               drg128_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/drg128s_continuous_hypoxia_binomial_glm_summary_revisions.txt",
+               gene_set_bionm_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/gene_set_hypoxia_binomial_glm_summary_revisions.txt"
+               )
 ```
 
 ```{r}
@@ -221,6 +229,64 @@ hallmark_hypoxia <- c("ADM",      "ADORA2B",  "AK4",      "AKAP12",   "ALDOA",  
                                     "VEGFA",    "VHL",      "VLDLR",    "WISP2",    "WSB1",     "XPNPEP1",
                                     "ZFP36",    "ZNF292")
 ```
+
+### Binomial model coefficients
+Read in coefficients from binomial models that account for total mutation burden when looking at relationship between hypoxia and driver mutations
+
+glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs), family = binomial, data = sub_data)
+
+Hallmark hypoxia
+```{r}
+hallmark_hypoxia_continuous_coefficients <- read.delim(params$hallmark_hypoxia_continuous_coefs, header = TRUE)
+rownames(hallmark_hypoxia_continuous_coefficients) <- hallmark_hypoxia_continuous_coefficients$Gene
+hallmark_hypoxia_continuous_coefficients$Significance <- ifelse(hallmark_hypoxia_continuous_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+hallmark_hypoxia_quartile_coefficients <- read.delim(params$hallmark_hypoxia_quartile_coefs, header = TRUE)
+rownames(hallmark_hypoxia_quartile_coefficients) <- hallmark_hypoxia_quartile_coefficients$Gene
+hallmark_hypoxia_quartile_coefficients$Significance <- ifelse(hallmark_hypoxia_quartile_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+DRG36
+```{r}
+drg36_continuous_coefficients <- read.delim(params$drg36_continuous_coefs, header = TRUE)
+rownames(drg36_continuous_coefficients) <- drg36_continuous_coefficients$Gene
+drg36_continuous_coefficients$Significance <- ifelse(drg36_continuous_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+drg36_quartile_coefficients <- read.delim(params$drg36_quartile_coefs, header = TRUE)
+rownames(drg36_quartile_coefficients) <- drg36_quartile_coefficients$Gene
+drg36_quartile_coefficients$Significance <- ifelse(drg36_quartile_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+DRG128
+```{r}
+drg128_continuous_coefficients <- read.delim(params$drg128_continuous_coefs, header = TRUE)
+rownames(drg128_continuous_coefficients) <- drg128_continuous_coefficients$Gene
+drg128_continuous_coefficients$Significance <- ifelse(drg128_continuous_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+```{r}
+drg128_quartile_coefficients <- read.delim(params$drg128_quartile_coefs, header = TRUE)
+rownames(drg128_quartile_coefficients) <- drg128_quartile_coefficients$Gene
+drg128_quartile_coefficients$Significance <- ifelse(drg128_quartile_coefficients$Hypoxia_p_adj <= 0.05, yes = "Significant", no = "N.S.")
+```
+
+Gene Sets
+```{r}
+gene_sets_binom_coefficients <- read.delim(params$gene_set_bionm_coefs, header = TRUE)
+rownames(gene_sets_binom_coefficients) <- gene_sets_binom_coefficients$mutation_set
+gene_sets_binom_coefficients$Score_Significance <- ifelse(gene_sets_binom_coefficients$Score_p <= 0.05, yes = "Significant", no = "N.S.")
+gene_sets_binom_coefficients$Quart_Significance <- ifelse(gene_sets_binom_coefficients$Quart_p <= 0.05, yes = "Significant", no = "N.S.")
+
+```
+
+```{r}
+gene_sets_binom_coefficients
+```
+
 
 # Re-arrange factors where necessary
 ```{r}
@@ -594,6 +660,12 @@ germline_hypoxia_enrichment_t1$fisher_p_adj <- p.adjust(germline_hypoxia_enrichm
 germline_hypoxia_enrichment_t1
 ```
 
+###### Binomial model
+```{r}
+hallmark_hypoxia_quartile_coefficients
+```
+
+
 ##### Scores
 Make a table for Wilcox test results
 ```{r}
@@ -631,6 +703,12 @@ germline_hypoxia_wilcox_t1
 ```{r}
 dim(germline_hypoxia_wilcox_t1)
 ```
+
+###### Binomial model
+```{r}
+hallmark_hypoxia_continuous_coefficients
+```
+
 
 ### DRG 36
 #### Any gene in list
@@ -689,6 +767,12 @@ germline_drg36_enrichment_t1$fisher_p_adj <- p.adjust(germline_drg36_enrichment_
 germline_drg36_enrichment_t1
 ```
 
+###### Binomial model
+```{r}
+drg36_quartile_coefficients
+```
+
+
 ##### Scores
 Make a table for Wilcox test results
 ```{r}
@@ -727,6 +811,11 @@ germline_drg36_wilcox_t1
 dim(germline_drg36_wilcox_t1)
 ```
 
+####### Binomial model
+```{r}
+drg36_continuous_coefficients
+```
+
 ### DRG 128
 #### Any gene in list
 ##### Quartiles
@@ -737,7 +826,6 @@ fisher.test(table(hypoxia_tier_1_lists_quart$DRG..128., hypoxia_tier_1_lists_qua
 table(hypoxia_tier_1_lists_quart$DRG..128., 
     hypoxia_tier_1_lists_quart$Buffa_signature_Sum_within_quartile_one_sample_per_donor)
 ```
-
 
 ##### Scores
 ```{r}
@@ -783,6 +871,14 @@ germline_drg128_enrichment_t1$fisher_p_adj <- p.adjust(germline_drg128_enrichmen
 germline_drg128_enrichment_t1
 ```
 
+
+###### Binomial model
+```{r}
+drg128_quartile_coefficients
+```
+
+
+
 ##### Scores
 Make a table for Wilcox test results
 ```{r}
@@ -819,6 +915,13 @@ germline_drg128_wilcox_t1
 ```{r}
 dim(germline_drg128_wilcox_t1)
 ```
+
+
+####### Binomial model
+```{r}
+drg128_continuous_coefficients
+```
+
 
 ## Tier 1 and 2 variants
 Sample vs gene list
@@ -1706,6 +1809,40 @@ wilcox.test(subset(summary_germ_som_hallmark_hypoxia, bin_muts_in_hallmark_hypox
             subset(summary_germ_som_hallmark_hypoxia, bin_muts_in_hallmark_hypoxia == "NA")[,"Buffa_signature_Sum_within"])
 ```
 
+## any germline or any somatic in set
+```{r}
+som_hallmark_hypoxia_muts <- as.data.frame(colSums(somatic_hallmark_hypoxia_mat_bin))
+colnames(som_hallmark_hypoxia_muts) <- c("Somatic_mutation")
+som_hallmark_hypoxia_muts$WGS_AssayID <- rownames(som_hallmark_hypoxia_muts)
+
+ger_hallmark_hypoxia_muts <- hypoxia_tier_1_2_lists[,c("WGS_AssayID","HALLMARK_HYPOXIA")]
+
+hallmark_hypoxia_muts <- merge(som_hallmark_hypoxia_muts,
+                               ger_hallmark_hypoxia_muts,
+                               by = "WGS_AssayID", all = TRUE)
+
+rownames(hallmark_hypoxia_muts) <- hallmark_hypoxia_muts$WGS_AssayID
+
+summary(hallmark_hypoxia_muts)
+
+hallmark_hypoxia_muts$Somatic_mutation <- ifelse(hallmark_hypoxia_muts$Somatic_mutation > 0, yes = "Mutation", no = "No Mutation")
+hallmark_hypoxia_muts$HALLMARK_HYPOXIA[hallmark_hypoxia_muts$HALLMARK_HYPOXIA == 1] <- "Mutation"
+hallmark_hypoxia_muts$HALLMARK_HYPOXIA[hallmark_hypoxia_muts$HALLMARK_HYPOXIA == 0] <- "No Mutation"
+
+colnames(hallmark_hypoxia_muts) <- c( "WGS_AssayID", "Somatic_mutation", "Germline_mutation")
+```
+
+```{r}
+dim(hallmark_hypoxia_muts)
+```
+
+```{r}
+hallmark_hypoxia_muts_t <- t(hallmark_hypoxia_muts)
+# arrange by hypoxia score
+hallmark_hypoxia_muts_t <- hallmark_hypoxia_muts_t[,rownames(hypoxia_op)[rownames(hypoxia_op) %in% colnames(hallmark_hypoxia_muts_t)]]
+```
+
+
 # Combine somatic and germline DRG36 variants
 ## Somatic DRG36 variants
 ```{r}
@@ -2317,17 +2454,60 @@ drg_heatmap_stats <- merge(germ_som_drg128_mat_hypoxia_enrichment_quart,
                           germline_drg128_enrichment_t1_2, 
                           by.x = "Gene_g_s_drg128", 
                           by.y = "Gene_g_drg128")
+drg_heatmap_stats <- merge(drg_heatmap_stats,
+                           germline_drg128_wilcox_t1_2,
+                           by.x = "Gene_g_s_drg128",
+                           by.y = "Gene")
+
 drg_heatmap_stats$g_s_drg128_significance <- ifelse(drg_heatmap_stats$fisher_p_adj_g_s_drg128 < 0.05, yes = "Significant", no = "N.S.")
 drg_heatmap_stats$g_drg128_significance <- ifelse(drg_heatmap_stats$fisher_p_adj_g_drg128 < 0.05, yes = "Significant", no = "N.S.")
+drg_heatmap_stats$g_drg128_wilcox_significance <- ifelse(drg_heatmap_stats$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
+
 rownames(drg_heatmap_stats) <- drg_heatmap_stats$Gene_g_s_drg128
 ```
 
 ```{r}
-ha_drg128_significance_annotation <- rowAnnotation("Q1 v Q4 Germline" = drg_heatmap_stats[,"g_drg128_significance"],
-                                                   "Q1 v Q4 Combined" = drg_heatmap_stats[,"g_s_drg128_significance"],
+coefficient_colours_drg128_cont <- colorRamp2(c(min(c(drg128_continuous_coefficients$Hypoxia_coefficient,
+                                                  hallmark_hypoxia_continuous_coefficients$Hypoxia_coefficient), na.rm = TRUE),
+                                    0,
+                                    max(c(drg128_continuous_coefficients$Hypoxia_coefficient,
+                                          hallmark_hypoxia_continuous_coefficients$Hypoxia_coefficient), na.rm = TRUE)),
+                                  c("grey20","white","firebrick"))
+coefficient_colours_drg128_quart <- colorRamp2(c(min(c(drg128_quartile_coefficients$Hypoxia_coefficient,
+                                                  hallmark_hypoxia_quartile_coefficients$Hypoxia_coefficient), na.rm = TRUE),
+                                    0,
+                                    max(c(drg128_quartile_coefficients$Hypoxia_coefficient,
+                                          hallmark_hypoxia_quartile_coefficients$Hypoxia_coefficient), na.rm = TRUE)),
+                                  c("grey20","white","firebrick"))
+```
+
+```{r}
+drg128_quartile_coefficients_merged <- merge(drg128_quartile_coefficients,
+                                             subset(gene_group, Gene %in% rownames(germ_som_drg128_mat)),
+                                             by = "Gene",
+                                             all.y = TRUE)
+drg128_continuous_coefficients_merged <- merge(drg128_continuous_coefficients,
+                                             subset(gene_group, Gene %in% rownames(germ_som_drg128_mat)),
+                                             by = "Gene",
+                                             all.y = TRUE)
+```
+
+```{r}
+ha_drg128_significance_annotation <- rowAnnotation("Q1 v Q4 - Germline" = drg_heatmap_stats[,"g_drg128_significance"],
+                                                   "Mut v Not - Germline" = drg_heatmap_stats[,"g_drg128_wilcox_significance"],
+                                                   "Score Coef - Somatic" = drg128_continuous_coefficients_merged$Hypoxia_coefficient,
+                                                   "Score Signif - Somatic" = drg128_continuous_coefficients_merged$Significance,
+                                                   "Quartile Coef - Somatic" = drg128_quartile_coefficients_merged$Hypoxia_coefficient,
+                                                   "Quartile Signif - Somatic" = drg128_quartile_coefficients_merged$Significance,
                                                    "DRG Group" = subset(gene_group, Gene %in% rownames(germ_som_drg128_mat))$Gene_list_group,
-                                                   col = list("Q1 v Q4 Germline" = c("Significant" = "firebrick", "N.S." = "grey"),
-                                                              "Q1 v Q4 Combined" = c("Significant" = "orangered", "N.S." = "grey")))
+                                                   col = list("Q1 v Q4 - Germline" = c("Significant" = "firebrick", "N.S." = "grey90"),
+                                                              "Mut v Not - Germline" = c("Significant" = "orangered", "N.S." = "grey90"),
+                                                              "Score Coef - Somatic" = coefficient_colours_drg128_cont,
+                                                              "Score Signif - Somatic" = c("Significant" = "goldenrod", "N.S." = "grey90"),
+                                                              "Quartile Coef - Somatic" = coefficient_colours_drg128_quart,
+                                                              "Quartile Signif - Somatic" = c("Significant" = "goldenrod", "N.S." = "grey90"),
+                                                              "DRG Group" = drg_group_colours),
+                                         annotation_name_rot = 45)
 ```
 
 ```{r}
@@ -2367,28 +2547,56 @@ hypoxia_heatmap_stats <- merge(hypoxia_heatmap_stats,
                           somatic_hallmark_hypoxia_mat_hypoxia_enrichment_quart, 
                           by.x = "Gene", 
                           by.y = "Gene_s_hypoxia", all = TRUE)
+hypoxia_heatmap_stats <- merge(hypoxia_heatmap_stats,
+                               germline_hypoxia_wilcox_t1_2,
+                               by.x = "Gene",
+                               by.y = "Gene")
 
 hypoxia_heatmap_stats$g_s_hypoxia_significance <- ifelse(hypoxia_heatmap_stats$fisher_p_adj_g_s_hypoxia < 0.05, yes = "Significant", no = "N.S.")
 hypoxia_heatmap_stats$s_hypoxia_significance <- ifelse(hypoxia_heatmap_stats$fisher_p_adj_s_hypoxia < 0.05, yes = "Significant", no = "N.S.")
 hypoxia_heatmap_stats$g_hypoxia_significance <- ifelse(hypoxia_heatmap_stats$fisher_p_adj_g_hypoxia < 0.05, yes = "Significant", no = "N.S.")
+hypoxia_heatmap_stats$g_hypoxia_wilcox_significance <- ifelse(hypoxia_heatmap_stats$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
 
 rownames(hypoxia_heatmap_stats) <- hypoxia_heatmap_stats$Gene
 hypoxia_heatmap_stats_sub <- subset(hypoxia_heatmap_stats, Gene %in% rownames(germ_som_hallmark_hypoxia_mat))
 ```
 
 ```{r}
-ha_hypoxia_significance_annotation <- rowAnnotation("Q1 v Q4 Germline" = hypoxia_heatmap_stats_sub[,"g_hypoxia_significance"],
-                                                    "Q1 v Q4 Somatic" = hypoxia_heatmap_stats_sub[,"s_hypoxia_significance"],
-                                                   "Q1 v Q4 Combined" = hypoxia_heatmap_stats_sub[,"g_s_hypoxia_significance"],
-                                                   col = list("Q1 v Q4 Germline" = c("Significant" = "firebrick", "N.S." = "grey"),
-                                                              "Q1 v Q4 Somatic" = c("Significant" = "coral", "N.S." = "grey"),
-                                                              "Q1 v Q4 Combined" = c("Significant" = "orangered", "N.S." = "grey")))
+hallmark_hypoxia_continuous_coefficients_merged <- merge(hallmark_hypoxia_continuous_coefficients,
+                                                         hypoxia_heatmap_stats_sub,
+                                                         by = "Gene",
+                                                         all.y = TRUE)
+hallmark_hypoxia_quartile_coefficients_merged <- merge(hallmark_hypoxia_quartile_coefficients,
+                                                         hypoxia_heatmap_stats_sub,
+                                                         by = "Gene",
+                                                         all.y = TRUE)
 ```
+
+```{r}
+ha_hypoxia_significance_annotation <- rowAnnotation("Q1 v Q4 - Germline" = hypoxia_heatmap_stats_sub[,"g_hypoxia_significance"],
+                                                    "Mut v Not - Germline" = hypoxia_heatmap_stats_sub[,"g_hypoxia_wilcox_significance"],
+                                                    "Score Coef - Somatic" = hallmark_hypoxia_continuous_coefficients_merged$Hypoxia_coefficient,
+                                                    "Score Signif - Somatic" = hallmark_hypoxia_continuous_coefficients_merged$Significance,
+                                                    "Quartile Coef - Somatic" = hallmark_hypoxia_quartile_coefficients_merged$Hypoxia_coefficient,
+                                                    "Quartile Signif - Somatic" = hallmark_hypoxia_quartile_coefficients_merged$Significance,
+                                                    col = list("Q1 v Q4 - Germline" = c("Significant" = "firebrick", "N.S." = "grey90"),
+                                                               "Mut v Not - Germline" = c("Significant" = "coral", "N.S." = "grey90"),
+                                                               "Q1 v Q4 Combined" = c("Significant" = "orangered", "N.S." = "grey90"),
+                                                               "Score Coef - Somatic" = coefficient_colours_drg128_cont,
+                                                               "Score Signif - Somatic" = c("Significant" = "goldenrod", "N.S." = "grey90"),
+                                                               "Quartile Coef - Somatic" = coefficient_colours_drg128_quart,
+                                                               "Quartile Signif - Somatic" = c("Significant" = "goldenrod", "N.S." = "grey90")),
+                                         annotation_name_rot = 45)
+```
+
+```{r}
+mut_colours <- c("Mutation" = "forestgreen", "No Mutation" = "grey")
+```
+
 
 ```{r}
 hallmark_hypoxia_mut_heatmap_2 <- Heatmap(germ_som_hallmark_hypoxia_mat_2,
                                         name = "Hallmark Hypoxia Mutations",
-                                        top_annotation = ha_row_annotation_top,
                                         right_annotation = ha_hypoxia_significance_annotation,
                                         show_column_names = FALSE,
                                         column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
@@ -2398,6 +2606,30 @@ hallmark_hypoxia_mut_heatmap_2 <- Heatmap(germ_som_hallmark_hypoxia_mat_2,
 
 ```{r fig.height=20, fig.width=17}
 draw(hallmark_hypoxia_mut_heatmap_2)
+```
+
+
+```{r}
+cumulative_heatmap <- Heatmap(hallmark_hypoxia_muts_t[c("Somatic_mutation","Germline_mutation"),],
+                              name = "Any Hallmark Hypoxia Mutation",
+                                        top_annotation = ha_row_annotation_top,
+                              show_column_names = FALSE,
+                              column_split = hypoxia_op$Buffa_signature_Sum_within_quartile_one_sample_per_donor,
+                              col = mut_colours,
+                              cluster_rows = TRUE)
+```
+
+```{r}
+draw(cumulative_heatmap)
+```
+
+# Combine heatmaps
+```{r}
+ht_list = cumulative_heatmap %v%  hallmark_hypoxia_mut_heatmap_2
+```
+
+```{r fig.height=20, fig.width=16}
+draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(3), "mm"))
 ```
 
 # Session Info

@@ -1,0 +1,111 @@
+---
+title: "Clinical overview table"
+output: html_notebook
+---
+
+Overview of clinical composition for subset of data used (n = 505). 
+
+# Libraries
+```{r}
+library(readr)
+library(magrittr)
+library(gtsummary)
+library(flextable)
+library(stringr)
+library(dplyr)
+library(forcats)
+```
+
+# Data
+```{r}
+dat <- read_delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+                col_types = cols(.default="?", age_at_tumour_collection = "d", 
+                                 psa_at_tumour_collection = "d", gleason_predominantly = "d",
+                                 gleason_less_predominantly = "d", donor_interval_of_last_followup = "d",
+                                 donor_relapse_interval = "d", donor_first_mets_interval_from_m0 = "d" ),
+                na = c("", "NA", "missing")) 
+```
+
+Subset data for samples used
+```{r}
+dat <- subset(dat, !is.na(Buffa_signature_Sum_within_quartile_one_sample_per_donor))
+```
+
+```{r}
+dim(dat)
+```
+
+
+# Table
+Clean data
+Add cellularity and pathology and treatment if available
+```{r}
+dat$path_t_stage <- str_replace(dat$path_t_stage, regex("T([1234]).*",ignore_case = TRUE),"pT\\1")
+dat <- dat %>% mutate(gleason=paste(gleason_predominantly,"+",gleason_less_predominantly, sep=""))
+
+dat$gleason[dat$gleason=="NA+NA"] <- NA
+
+dat$GGG <- factor(dat$gleason_grade_group, levels=c(1,2,3,4,5))
+
+
+dat$mets_ind[dat$mets_ind %in% c("Unknown")] <- NA
+dat$relapse_ind[dat$relapse_ind %in% c("Unknown")] <- NA
+
+# Change pT stage to "not applicable" for biopsy samples and for radiotherapy
+dat$path_t_stage[dat$patient_state_first_sample %in% c("Biopsy","Met biopsy","Radiotherapy")] <- "Not applicable"
+
+# Change follow up for de novo mets to NA so it's not counted in averages
+# ** USE TABLE WITHOUT MISSING DATA **
+# In missing data table this gets counted as missing rather than "not applicable"
+# and as the column is numeric, having "not applicable" in it messes up the table.
+dat$donor_relapse_interval[dat$de_novo_mets == 1] <- NA
+dat$donor_first_mets_interval_from_m0[dat$de_novo_mets == 1] <- NA
+
+# Get lists of donors that we have samples for 
+# donors <- read_tsv(file='20241120_upset_donors.txt')
+
+
+# Create summary table
+# dat_sub <- dat %>% filter(record_id %in% donors$PPCG_Donor_ID)
+
+dat_sub <- dat %>% dplyr::select(group, age_at_tumour_collection,psa_at_tumour_collection,
+                              path_t_stage,GGG,
+                              donor_interval_of_last_followup:donor_first_mets_interval_from_m0,
+                              de_novo_mets, patient_state_first_sample,
+                              Cellularity)
+```
+
+Create table
+```{r}
+tbl3 <- dat_sub %>% tbl_summary(by = group, missing = "no",
+                                label = list(
+                                  age_at_tumour_collection ~ "Age at tumour collection (yrs)",
+                                  psa_at_tumour_collection ~ "PSA at tumour collection (ng/ml)",
+                                  path_t_stage ~ "Pathological T stage",
+                                  patient_state_first_sample ~ "Patient state",
+                                  de_novo_mets ~ "De novo mets",
+                                  GGG ~ "Grade Group",
+                                  donor_interval_of_last_followup ~ "Donor interval of last follow-up (days)",
+                                  relapse_ind ~ "Relapse indicator",
+                                  donor_relapse_interval ~ "Relapse interval (days)",
+                                  mets_ind ~ "Metastatic disease indicator",
+                                  donor_first_mets_interval_from_m0 ~ "Metastatic disease interval (days)",
+                                  Cellularity ~ "Primary tumour cellularity"
+                                )
+) %>% bold_labels() %>%
+  add_overall()
+# tbl3 %>% 
+#   as_flex_table() %>%
+#   flextable::save_as_docx(path=paste0("Clin_summary_table/core_summary_table_without_missing_",Sys.Date(),".docx"))
+
+## Latex output needs manual editing to make it look nice
+text_tbl3 <- as_kable(tbl3, format = "latex")
+writeLines(text_tbl3, con = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/clinical_summary_table_505_tex_",Sys.Date(),".txt"))
+
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
+
