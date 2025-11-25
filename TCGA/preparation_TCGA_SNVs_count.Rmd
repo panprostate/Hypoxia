@@ -1,0 +1,77 @@
+---
+title: "Counting mutations in TCGA"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+# Libraries
+```{r}
+
+```
+
+# Data
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               tcga_sheet = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/gdc_sample_sheet.2025-09-30.tsv",
+               tcga_location = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/",
+               outdir = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/")
+```
+
+
+## TCGA
+Sample sheet
+```{r}
+tcga_sample_sheet <- read.delim(params$tcga_sheet, header = TRUE)
+```
+
+# Pick TCGA SNV files samples
+
+```{r}
+tcga_snvs <- subset(tcga_sample_sheet, Data.Type == "Masked Somatic Mutation")
+```
+```{r}
+tcga_snvs$tumour_sample <- ifelse(tcga_snvs$Tissue.Type == "Tumor, Normal", yes =  gsub(",.*","",tcga_snvs$Sample.ID), no = gsub(".*, ","",tcga_snvs$Sample.ID))
+```
+
+
+# Create summary data frames
+
+```{r}
+tcga_snv_df <- as.data.frame(matrix(nrow = nrow(tcga_snvs), ncol = 3, data = NA))
+colnames(tcga_snv_df) <- c("tcga_id","file_exists","num.SNVs.TCGA")
+tcga_snv_df$tcga_id <- tcga_snvs$tumour_sample
+```
+
+# Fill in dfs
+```{r}
+for(i in 1:nrow(tcga_snvs)){
+  filename <- paste0(params$tcga_location, tcga_snvs$File.ID[i], "/", tcga_snvs$File.Name[i])
+  if(file.exists(filename)){
+    tcga_snv_df$file_exists[i] <- "yes"
+    
+    sample_maf <- read.delim(filename, comment.char = "#")
+    
+    tcga_snv_df$num.SNVs.TCGA[i] <- nrow(sample_maf)
+     
+  }else{
+    tcga_snv_df$file_exists[i] <- "no"
+    
+  }
+}
+```
+
+# Save dfs
+```{r}
+write.table(tcga_snv_df, file = paste0(params$outdir,"TCGA_PRAD_num_SNVs_",Sys.Date(),".txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+```
+
+
+# Session info
+```{r}
+sessionInfo()
+```

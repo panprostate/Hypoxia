@@ -1,0 +1,2074 @@
+---
+title: "lmrob of hypoxia in RNA modelled for TCGA"
+author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+Somewhat complete robust lmm analysis for publication. 
+
+Hypoxia signatures from previous runs have been read in. In this case hypoxia scores were calculated by scaling the expression of the hypoxia genes within the sample rather than across. Cell line experiments suggest this works best. 
+
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggsci)
+library(ggthemes)
+library(gridExtra)
+library(patchwork)
+library(performance)
+library(RColorBrewer)
+library(robustbase)
+library(sjPlot)
+library(SummarizedExperiment)
+library(xtable)
+library(qs)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+# Functions
+```{r}
+my_point_plot <- function(object){ggplot()+geom_point(aes(x = object$fitted.values, y = object$residuals, colour = object$rweights))+geom_hline(yintercept = 0)}
+
+my_qq_plot <- function(object){ggplot()+geom_qq_line(aes(sample = object$residuals))+geom_qq(aes(sample = object$residuals))+geom_point(aes(y = object$residuals,colour =  object$rweights, x = -2.2), shape = 17)+ggtitle("triangles are just for showing weights\nand are not part of the plot")}
+```
+
+
+# Data
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               TCGA_FGA = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/TCGA_PRAD_cBioPortal_Fraction_Genome_Altered.txt",
+               TCGA_CX = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/CINSignature_Activities_THRESH95_TCGA-PRAD-WGS_Jun2026.tsv",
+               TCGA_SBS = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/PPCG_SBS96_assigned_to_TCGA_samples/Assignment_Solution/Activities/Assignment_Solution_Activities.txt",
+               TCGA_ascat_CX = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/tcga_prad_wgs_ascat_segments.rds",
+               tcga_snv_count = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_num_SNVs_2025-10-12.txt")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## RNA data
+```{r}
+rna_dat_supervised = qread('/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_RNA/DEPRECATED_Release_1.3/PPCG_RNAseq_RUVIIIPRPS_Supervised.qs')
+```
+
+
+## Combined data
+Combined data from `../manuscript_dec_2024_code/Preparation_2_combining_PPCG_WGS_RNA_with_clinical_data_v7.Rmd` and `../manuscript_dec_2024_code/Preparation_1_combining_PPCG_WGS_RNA_data_v7.Rmd`. Check this file for version info. 
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+Make RNA local donor ID
+```{r}
+combined_data$RNA_Local_Donor_ID <- substr(combined_data$RNA_Local_Assay_ID,1,nchar(combined_data$RNA_Local_Assay_ID)-4)
+```
+
+## TCGA SNV count
+```{r}
+tcga_snv_count <- read.delim(params$tcga_snv_count)
+```
+
+```{r}
+tcga_snv_count <- subset(tcga_snv_count, file_exists == "yes")
+```
+
+## TCGA ASCAT segs used for CX
+```{r}
+ascat_segs <-  readRDS(params$TCGA_ascat_CX)
+```
+```{r}
+ascat_counts <- as.data.frame(table(ascat_segs$sample))
+ascat_counts <- subset(ascat_counts, Freq > 0)
+colnames(ascat_counts) <- c("tcga.id","num_cnas")
+```
+
+## TCGA CN signatures
+```{r}
+tcga_cn_signatures <- read.delim(params$TCGA_CX)
+```
+```{r}
+tcga_cn_signatures <- merge(tcga_cn_signatures, ascat_counts, 
+                            by.x = "sample",
+                            by.y = "tcga.id")
+```
+
+## TCGA SBS
+```{r}
+tcga_sbs <- read.delim(params$TCGA_SBS)
+```
+```{r}
+colnames(tcga_sbs) <- paste0(colnames(tcga_sbs),"_TCGA")
+```
+
+
+## TCGA FGA
+```{r}
+tcga_fga <- read.delim(params$TCGA_FGA)
+```
+
+## TCGA CN signature numbers
+```{r}
+cna_colnames <- c("CX1",  "CX2",  "CX3",  "CX4",  "CX5",  "CX7",  "CX8",  "CX11")
+cna_colnames_counts <- paste0(cna_colnames,"_numbers")
+```
+
+### Multiply CNA signature proportions by number of CNAs
+```{r}
+tcga_cn_signatures[,cna_colnames_counts] <- tcga_cn_signatures[,cna_colnames]*tcga_cn_signatures$num_cnas
+```
+
+# Merge data and select samples
+Use Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+Select only tumour samples. Then only one sample per individual donor. 
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_extended))
+```
+
+
+```{r}
+hypoxia_signatures_tum_data_single <- hypoxia_signatures_tum_data_single[grep("TCGA",hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID),]
+```
+
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+Select one sample per patient by making sure it's tumour
+```{r}
+hypoxia_signatures_tum_data_single <- subset(hypoxia_signatures_tum_data_single, RNA_Sample_Type == "TUM")
+```
+
+```{r}
+length(unique(hypoxia_signatures_tum_data_single$PPCG_Donor_ID))
+```
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+Merge with RNA purity for modelling
+```{r}
+# add RNA purity for modelling
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single, 
+                                     rna_dat_supervised@colData[,c("PPCG_RNA_Assay_ID",
+                                                       "tumour.purity.estimate")],
+                                     by.x = "PPCG_RNA_Assay_ID",
+                                     by.y = "PPCG_RNA_Assay_ID",
+                                     all.x = TRUE)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single$RNA_Local_Sample_ID <- substr(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID,1,nchar(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID)-1)
+```
+
+Merge with TCGA CN signatures
+```{r}
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single,
+                                            tcga_cn_signatures,
+                                            by.x = "RNA_Local_Donor_ID",
+                                            by.y = "sample",
+                                            all.x = TRUE)
+```
+
+Merge with TCGA SBS signatures
+```{r}
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single,
+                                            tcga_sbs,
+                                            by.x = "RNA_Local_Assay_ID",
+                                            by.y = "Samples_TCGA",
+                                            all.x = TRUE)
+```
+
+Merge with TCGA FGA values
+```{r}
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single,
+                                            tcga_fga[,c("Sample.ID","Fraction.Genome.Altered")],
+                                            by.x = "RNA_Local_Sample_ID",
+                                            by.y = "Sample.ID",
+                                            all.x = TRUE)
+```
+
+Merge TCGA SNV count
+```{r}
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single,
+                                            tcga_snv_count,
+                                            by.x = "RNA_Local_Assay_ID",
+                                            by.y = "tcga_id",
+                                            all.x = TRUE)
+```
+
+## Check data
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+```{r}
+length(unique(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID))
+```
+
+```{r}
+length(unique(hypoxia_signatures_tum_data_single$PPCG_Donor_ID))
+```
+
+```{r}
+summary(as.data.frame(hypoxia_signatures_tum_data_single))
+```
+
+# Subset data for modelling
+
+## Genomic instability
+### PGA Clonal
+```{r}
+lm_fga_clonal_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate) &
+                               !is.na(Fraction.Genome.Altered))
+```
+```{r}
+dim(lm_fga_clonal_data)
+```
+
+### SNVs
+```{r}
+lm_snvs_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate) &
+                               !is.na(num.SNVs.TCGA))
+```
+```{r}
+dim(lm_snvs_data)
+```
+
+### CNAs
+```{r}
+lm_cnas_data <- subset(hypoxia_signatures_tum_data_single, 
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate) &
+                               !is.na(num_cnas))
+```
+```{r}
+dim(lm_cnas_data)
+```
+
+
+# Robust linear models
+robustlmm package
+
+## PGA Clonal
+```{r}
+lmrob_fga_clonal <- lmrob(Fraction.Genome.Altered ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_fga_clonal_data)
+```
+
+```{r}
+summary(lmrob_fga_clonal)
+```
+
+
+#### Check model diagnostics with tests
+
+```{r}
+check_collinearity(lmrob_fga_clonal)
+# # check_normality(lmrob_pga_clonal)
+check_autocorrelation(lmrob_fga_clonal)
+check_heteroscedasticity(lmrob_fga_clonal)
+# check_outliers(lmrob_pga_clonal)
+```
+
+Partial residual plot to detect poor specification
+
+```{r}
+my_point_plot(lmrob_fga_clonal)
+my_qq_plot(lmrob_fga_clonal)
+```
+
+```{r}
+car::qqPlot(residuals(lmrob_fga_clonal))
+```
+
+
+### model output table
+```{r}
+tab_model(lmrob_fga_clonal)
+```
+
+
+## SNVs
+```{r}
+lm_snvs_data$num.SNVs.TCGA_div100 <- lm_snvs_data$num.SNVs.TCGA/100
+```
+
+```{r}
+lmrob_snvs <- lmrob(num.SNVs.TCGA_div100 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_snvs_data)
+```
+
+```{r}
+summary(lmrob_snvs)
+```
+
+
+```{r}
+my_point_plot(lmrob_snvs)
+my_qq_plot(lmrob_snvs)
+```
+
+
+### model output table
+```{r}
+tab_model(lmrob_snvs)
+```
+
+
+## CNAs
+
+```{r}
+lmrob_cnas <- lmrob(num_cnas ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_cnas_data)
+```
+
+```{r}
+summary(lmrob_cnas)
+```
+
+```{r}
+my_point_plot(lmrob_cnas)
+my_qq_plot(lmrob_cnas)
+```
+
+
+### model output table
+```{r}
+tab_model(lmrob_cnas)
+```
+
+
+
+## GI model p-value and coefficient table
+Make a table with all the p-values from the robustlmm GI models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+lmrob_GI_outputs <- as.data.frame(matrix(nrow = 3, ncol = 12))
+colnames(lmrob_GI_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI","CI_low",
+                                        "CI_high","t","df_error","p","Variable")
+lmrob_GI_outputs$Model <- c("lmrob_fga_clonal", "lmrob_snvs", 
+                   "lmrob_cnas")
+model_list <- list(lmrob_fga_clonal, lmrob_snvs, 
+                   lmrob_cnas)
+lmrob_GI_outputs$Variable <- c("fga","num.SNVs.TCGA_div100","num_cnvs")
+lmrob_GI_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                              "Buffa_signature_Sum_within")
+
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(lmrob_GI_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  lmrob_GI_outputs[i,3:11] <- model_dat[model_dat$Parameter == lmrob_GI_outputs$Measure[i],1:9]
+}
+
+lmrob_GI_outputs$measure_p_adj <- p.adjust(lmrob_GI_outputs$p, method = "BH")
+```
+
+```{r}
+model_list_GI <- model_list
+```
+
+
+```{r}
+lmrob_GI_outputs
+```
+
+```{r}
+dput(lmrob_GI_outputs)
+```
+
+Extract data and put in relevant slot
+
+## Mutational signatures
+### Data
+```{r}
+# SBS
+
+lm_SBS1_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS1_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS1_data$SBS1_div10 <- lm_SBS1_data$SBS1_TCGA
+
+lm_SBS2_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS2_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS2_data$SBS2_div10 <- lm_SBS2_data$SBS2_TCGA
+
+lm_SBS3_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS3_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS3_data$SBS3_div10 <- lm_SBS3_data$SBS3_TCGA
+
+lm_SBS5_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS5_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS5_data$SBS5_div10 <- lm_SBS5_data$SBS5_TCGA
+
+lm_SBS8_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS8_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS8_data$SBS8_div10 <- lm_SBS8_data$SBS8_TCGA
+
+lm_SBS13_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS13_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS13_data$SBS13_div10 <- lm_SBS13_data$SBS13_TCGA
+
+lm_SBS15_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS15_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS15_data$SBS15_div10 <- lm_SBS15_data$SBS15_TCGA
+
+lm_SBS17a_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS17a_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS17a_data$SBS17a_div10 <- lm_SBS17a_data$SBS17a_TCGA
+
+lm_SBS17b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS17b_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate) )
+lm_SBS17b_data$SBS17b_div10 <- lm_SBS17b_data$SBS17b_TCGA
+
+lm_SBS18_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS18_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS18_data$SBS18_div10 <- lm_SBS18_data$SBS18_TCGA
+
+lm_SBS21_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS21_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS21_data$SBS21_div10 <- lm_SBS21_data$SBS21_TCGA
+
+lm_SBS22b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS22b_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS22b_data$SBS22b_div10 <- lm_SBS22b_data$SBS22b_TCGA
+
+lm_SBS28_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS28_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS28_data$SBS28_div10 <- lm_SBS28_data$SBS28_TCGA
+
+lm_SBS34_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS34_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS34_data$SBS34_div10 <- lm_SBS34_data$SBS34_TCGA
+
+lm_SBS37_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS37_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS37_data$SBS37_div10 <- lm_SBS37_data$SBS37_TCGA
+
+lm_SBS38_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS38_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS38_data$SBS38_div10 <- lm_SBS38_data$SBS38_TCGA
+
+lm_SBS40a_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS40a_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS40a_data$SBS40a_div10 <- lm_SBS40a_data$SBS40a_TCGA
+
+lm_SBS40b_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS40b_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS40b_data$SBS40b_div10 <- lm_SBS40b_data$SBS40b_TCGA
+
+lm_SBS44_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS44_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS44_data$SBS44_div10 <- lm_SBS44_data$SBS44_TCGA
+
+lm_SBS52_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS52_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS52_data$SBS52_div10 <- lm_SBS52_data$SBS52_TCGA
+
+lm_SBS54_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS54_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS54_data$SBS54_div10 <- lm_SBS54_data$SBS54_TCGA
+
+lm_SBS96D_data <- subset(hypoxia_signatures_tum_data_single, !is.na(SBS96D_TCGA) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_SBS96D_data$SBS96D_div10 <- lm_SBS96D_data$SBS96D_TCGA
+
+
+```
+
+
+### Models
+#### SBS
+##### SBS1
+```{r}
+lmrob_SBS1 <- lmrob(SBS1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS1_data)
+```
+
+```{r}
+summary(lmrob_SBS1)
+```
+
+```{r}
+my_point_plot(lmrob_SBS1)
+my_qq_plot(lmrob_SBS1)
+```
+
+
+```{r}
+tab_model(lmrob_SBS1)
+```
+
+##### SBS2
+```{r}
+lmrob_SBS2 <- lmrob(SBS2_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS2_data)
+```
+
+```{r}
+summary(lmrob_SBS2)
+```
+
+```{r}
+my_point_plot(lmrob_SBS2)
+my_qq_plot(lmrob_SBS2)
+```
+
+```{r}
+tab_model(lmrob_SBS2)
+```
+
+##### SBS3
+```{r}
+lmrob_SBS3 <- lmrob(SBS3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS3_data)
+```
+
+```{r}
+summary(lmrob_SBS3)
+```
+
+```{r}
+my_point_plot(lmrob_SBS3)
+my_qq_plot(lmrob_SBS3)
+```
+
+```{r}
+tab_model(lmrob_SBS3)
+```
+
+##### SBS5
+```{r}
+lmrob_SBS5 <- lmrob(SBS5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS5_data)
+```
+
+```{r}
+summary(lmrob_SBS5)
+```
+
+```{r}
+my_point_plot(lmrob_SBS5)
+my_qq_plot(lmrob_SBS5)
+```
+
+```{r}
+tab_model(lmrob_SBS5)
+```
+
+##### SBS8
+```{r}
+lmrob_SBS8 <- lmrob(SBS8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS8_data)
+```
+
+```{r}
+summary(lmrob_SBS8)
+```
+
+```{r}
+my_point_plot(lmrob_SBS8)
+my_qq_plot(lmrob_SBS8)
+```
+
+```{r}
+tab_model(lmrob_SBS8)
+```
+
+##### SBS13
+```{r}
+lmrob_SBS13 <- lmrob(SBS13_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS13_data)
+```
+
+```{r}
+summary(lmrob_SBS13)
+```
+
+```{r}
+my_point_plot(lmrob_SBS13)
+my_qq_plot(lmrob_SBS13)
+```
+
+```{r}
+tab_model(lmrob_SBS13)
+```
+
+##### SBS15
+```{r}
+lmrob_SBS15 <- lmrob(SBS15_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS15_data)
+```
+
+```{r}
+summary(lmrob_SBS15)
+```
+
+```{r}
+my_point_plot(lmrob_SBS15)
+my_qq_plot(lmrob_SBS15)
+```
+
+```{r}
+tab_model(lmrob_SBS15)
+```
+
+##### SBS17a
+```{r}
+lmrob_SBS17a <- lmrob(SBS17a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS17a_data)
+```
+
+```{r}
+summary(lmrob_SBS17a)
+```
+
+```{r}
+my_point_plot(lmrob_SBS17a)
+my_qq_plot(lmrob_SBS17a)
+```
+
+```{r}
+tab_model(lmrob_SBS17a)
+```
+
+##### SBS17b
+```{r}
+lmrob_SBS17b <- lmrob(SBS17b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS17b_data)
+```
+
+```{r}
+summary(lmrob_SBS17b)
+```
+
+```{r}
+my_point_plot(lmrob_SBS17b)
+my_qq_plot(lmrob_SBS17b)
+```
+
+```{r}
+tab_model(lmrob_SBS17b)
+```
+
+##### SBS18
+```{r}
+lmrob_SBS18 <- lmrob(SBS18_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS18_data)
+```
+
+```{r}
+summary(lmrob_SBS18)
+```
+
+```{r}
+my_point_plot(lmrob_SBS18)
+my_qq_plot(lmrob_SBS18)
+```
+
+```{r}
+tab_model(lmrob_SBS18)
+```
+
+##### SBS21
+```{r}
+lmrob_SBS21 <- lmrob(SBS21_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS21_data)
+```
+
+```{r}
+summary(lmrob_SBS21)
+```
+
+```{r}
+my_point_plot(lmrob_SBS21)
+my_qq_plot(lmrob_SBS21)
+```
+
+```{r}
+tab_model(lmrob_SBS21)
+```
+
+##### SBS22b
+```{r}
+dim(lm_SBS22b_data)
+```
+
+```{r}
+# lmrob_SBS22b <- lmrob(SBS22b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS22b_data)
+```
+
+```{r}
+# summary(lmrob_SBS22b)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS22b)
+# my_qq_plot(lmrob_SBS22b)
+```
+
+```{r}
+# tab_model(lmrob_SBS22b)
+```
+
+##### SBS28
+```{r}
+lmrob_SBS28 <- lmrob(SBS28_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS28_data)
+```
+
+```{r}
+summary(lmrob_SBS28)
+```
+
+```{r}
+my_point_plot(lmrob_SBS28)
+my_qq_plot(lmrob_SBS28)
+```
+
+```{r}
+tab_model(lmrob_SBS28)
+```
+
+##### SBS34
+```{r}
+lm_SBS34_data$SBS34_div10
+```
+
+```{r}
+# lmrob_SBS34 <- lmrob(SBS34_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS34_data)
+```
+
+```{r}
+# summary(lmrob_SBS34)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS34)
+# my_qq_plot(lmrob_SBS34)
+```
+
+```{r}
+# tab_model(lmrob_SBS34)
+```
+
+##### SBS37
+```{r}
+lmrob_SBS37 <- lmrob(SBS37_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS37_data)
+```
+
+```{r}
+summary(lmrob_SBS37)
+```
+
+```{r}
+my_point_plot(lmrob_SBS37)
+my_qq_plot(lmrob_SBS37)
+```
+
+```{r}
+tab_model(lmrob_SBS37)
+```
+
+##### SBS38
+```{r}
+lmrob_SBS38 <- lmrob(SBS38_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS38_data)
+```
+
+```{r}
+summary(lmrob_SBS38)
+```
+
+```{r}
+my_point_plot(lmrob_SBS38)
+my_qq_plot(lmrob_SBS38)
+```
+
+```{r}
+tab_model(lmrob_SBS38)
+```
+
+##### SBS40a
+```{r}
+lmrob_SBS40a <- lmrob(SBS40a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS40a_data)
+```
+
+```{r}
+summary(lmrob_SBS40a)
+```
+
+```{r}
+my_point_plot(lmrob_SBS40a)
+my_qq_plot(lmrob_SBS40a)
+```
+
+```{r}
+tab_model(lmrob_SBS40a)
+```
+
+##### SBS40b
+```{r}
+lmrob_SBS40b <- lmrob(SBS40b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS40b_data)
+```
+
+```{r}
+summary(lmrob_SBS40b)
+```
+
+```{r}
+my_point_plot(lmrob_SBS40b)
+my_qq_plot(lmrob_SBS40b)
+```
+
+```{r}
+tab_model(lmrob_SBS40b)
+```
+
+##### SBS44
+```{r}
+lmrob_SBS44 <- lmrob(SBS44_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS44_data)
+```
+
+```{r}
+summary(lmrob_SBS44)
+```
+
+```{r}
+my_point_plot(lmrob_SBS44)
+my_qq_plot(lmrob_SBS44)
+```
+
+```{r}
+tab_model(lmrob_SBS44)
+```
+
+##### SBS52
+```{r}
+lmrob_SBS52 <- lmrob(SBS52_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS52_data)
+```
+
+```{r}
+summary(lmrob_SBS52)
+```
+
+```{r}
+my_point_plot(lmrob_SBS52)
+my_qq_plot(lmrob_SBS52)
+```
+
+```{r}
+tab_model(lmrob_SBS52)
+```
+
+##### SBS54
+```{r}
+lmrob_SBS54 <- lmrob(SBS54_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS54_data)
+```
+
+```{r}
+summary(lmrob_SBS54)
+```
+
+```{r}
+my_point_plot(lmrob_SBS54)
+my_qq_plot(lmrob_SBS54)
+```
+
+```{r}
+tab_model(lmrob_SBS54)
+```
+
+##### SBS96D
+```{r}
+lmrob_SBS96D <- lmrob(SBS96D_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_SBS96D_data)
+```
+
+```{r}
+summary(lmrob_SBS96D)
+```
+
+```{r}
+my_point_plot(lmrob_SBS96D)
+my_qq_plot(lmrob_SBS96D)
+```
+
+```{r}
+tab_model(lmrob_SBS96D)
+```
+
+#### SBS model p-value and coefficient table
+Make a table with all the p-values from the robustlmm SBS models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+lmrob_SBS_outputs <- as.data.frame(matrix(nrow = 20, ncol = 12))
+colnames(lmrob_SBS_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI","CI_low",
+                                        "CI_high","t","df_error","p","Variable")
+lmrob_SBS_outputs$Model <- c("lmrob_SBS1",	"lmrob_SBS2",	"lmrob_SBS3",	"lmrob_SBS5",	"lmrob_SBS8",	
+                               "lmrob_SBS13",	"lmrob_SBS15",	"lmrob_SBS17a",	"lmrob_SBS17b",	"lmrob_SBS18",
+                               "lmrob_SBS21",	#"lmrob_SBS22b",	
+                             "lmrob_SBS28",	#"lmrob_SBS34",	
+                             "lmrob_SBS37",
+                               "lmrob_SBS38",	"lmrob_SBS40a",	"lmrob_SBS40b",	"lmrob_SBS44",	"lmrob_SBS52",
+                               "lmrob_SBS54",	"lmrob_SBS96D")
+model_list <- list(lmrob_SBS1,	lmrob_SBS2,	lmrob_SBS3,	lmrob_SBS5,	lmrob_SBS8,	
+                               lmrob_SBS13,	lmrob_SBS15,	lmrob_SBS17a,	lmrob_SBS17b,	lmrob_SBS18,
+                               lmrob_SBS21,	#lmrob_SBS22b,	
+                   lmrob_SBS28,	#lmrob_SBS34,	
+                   lmrob_SBS37,
+                               lmrob_SBS38,	lmrob_SBS40a,	lmrob_SBS40b,	lmrob_SBS44,	lmrob_SBS52,
+                               lmrob_SBS54,	lmrob_SBS96D)
+lmrob_SBS_outputs$Variable <- c("SBS1_div10",	"SBS2_div10",	"SBS3_div10",	"SBS5_div10",	"SBS8_div10",	
+                               "SBS13_div10",	"SBS15_div10",	"SBS17a_div10",	"SBS17b_div10",	"SBS18_div10",
+                               "SBS21_div10",	#"SBS22b_div10",	
+                               "SBS28_div10",	#"SBS34_div10",	
+                               "SBS37_div10",
+                               "SBS38_div10",	"SBS40a_div10",	"SBS40b_div10",	"SBS44_div10",	"SBS52_div10",
+                               "SBS54_div10",	"SBS96D_div10")
+lmrob_SBS_outputs$Measure <- c("Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",
+                               #"Buffa_signature_Sum_within",	#"Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(lmrob_SBS_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  lmrob_SBS_outputs[i,3:11] <- model_dat[model_dat$Parameter == lmrob_SBS_outputs$Measure[i],1:9]
+}
+
+lmrob_SBS_outputs$measure_p_adj <- p.adjust(lmrob_SBS_outputs$p, method = "BH")
+```
+
+```{r}
+lmrob_SBS_outputs
+```
+
+```{r}
+dput(lmrob_SBS_outputs)
+```
+
+```{r}
+model_list_SBS <- model_list
+```
+
+
+#### CN Signatures
+##### Data
+```{r}
+lm_CX1_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX1_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX2_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX2_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX3_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX3_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX4_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX4_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX5_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX5_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX7_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX7_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX8_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX8_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+lm_CX11_data <- subset(hypoxia_signatures_tum_data_single, !is.na(CX11_numbers) &
+                               !is.na(age_at_tumour_collection) &
+                               !is.na(ISUP_Grade) &
+                               !is.na(tumour.purity.estimate))
+```
+
+##### Models
+###### CX1
+```{r}
+lmrob_CX1 <- lmrob(CX1_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX1_data)
+```
+
+```{r}
+summary(lmrob_CX1)
+```
+
+```{r}
+my_point_plot(lmrob_CX1)
+my_qq_plot(lmrob_CX1)
+```
+
+```{r}
+tab_model(lmrob_CX1)
+```
+
+###### CX2
+```{r}
+lmrob_CX2 <- lmrob(CX2_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX2_data)
+```
+
+```{r}
+summary(lmrob_CX2)
+```
+
+```{r}
+my_point_plot(lmrob_CX2)
+my_qq_plot(lmrob_CX2)
+```
+
+```{r}
+tab_model(lmrob_CX2)
+```
+
+###### CX3
+```{r}
+lmrob_CX3 <- lmrob(CX3_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX3_data)
+```
+
+```{r}
+summary(lmrob_CX3)
+```
+
+```{r}
+my_point_plot(lmrob_CX3)
+my_qq_plot(lmrob_CX3)
+```
+
+```{r}
+tab_model(lmrob_CX3)
+```
+
+###### CX4
+```{r}
+lmrob_CX4 <- lmrob(CX4_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX4_data)
+```
+
+```{r}
+summary(lmrob_CX4)
+```
+
+```{r}
+my_point_plot(lmrob_CX4)
+my_qq_plot(lmrob_CX4)
+```
+
+```{r}
+tab_model(lmrob_CX4)
+```
+
+###### CX5
+```{r}
+lmrob_CX5 <- lmrob(CX5_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX5_data)
+```
+
+```{r}
+summary(lmrob_CX5)
+```
+
+```{r}
+my_point_plot(lmrob_CX5)
+my_qq_plot(lmrob_CX5)
+```
+
+```{r}
+tab_model(lmrob_CX5)
+```
+
+###### CX7
+```{r}
+lmrob_CX7 <- lmrob(CX7_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX7_data)
+```
+
+```{r}
+summary(lmrob_CX7)
+```
+
+```{r}
+my_point_plot(lmrob_CX7)
+my_qq_plot(lmrob_CX7)
+```
+
+```{r}
+tab_model(lmrob_CX7)
+```
+
+###### CX8
+```{r}
+lmrob_CX8 <- lmrob(CX8_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX8_data)
+```
+
+```{r}
+summary(lmrob_CX8)
+```
+
+```{r}
+my_point_plot(lmrob_CX8)
+my_qq_plot(lmrob_CX8)
+```
+
+```{r}
+tab_model(lmrob_CX8)
+```
+
+###### CX11
+```{r}
+lmrob_CX11 <- lmrob(CX11_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = lm_CX11_data)
+```
+
+```{r}
+summary(lmrob_CX11)
+```
+
+```{r}
+my_point_plot(lmrob_CX11)
+my_qq_plot(lmrob_CX11)
+```
+
+```{r}
+tab_model(lmrob_CX11)
+```
+
+##### Output table
+Make a table with all the p-values from the robustlmm CX models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+lmrob_CX_outputs <- as.data.frame(matrix(nrow = 8, ncol = 12))
+colnames(lmrob_CX_outputs) <- c("Model","Measure","Parameter","Coefficient","SE","CI","CI_low",
+                                        "CI_high","t","df_error","p","Variable")
+lmrob_CX_outputs$Model <- c("lmrob_CX1","lmrob_CX2","lmrob_CX3","lmrob_CX4","lmrob_CX5",
+                             "lmrob_CX7","lmrob_CX8","lmrob_CX11")
+model_list <- list(lmrob_CX1,lmrob_CX2,lmrob_CX3,lmrob_CX4,lmrob_CX5,
+                             lmrob_CX7,lmrob_CX8,lmrob_CX11)
+lmrob_CX_outputs$Variable <- c("CX1_numbers","CX2_numbers","CX3_numbers","CX4_numbers","CX5_numbers",
+                             "CX7_numbers","CX8_numbers","CX11_numbers")
+lmrob_CX_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(lmrob_CX_outputs)){
+
+  model <- model_list[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  lmrob_CX_outputs[i,3:11] <- model_dat[model_dat$Parameter == lmrob_CX_outputs$Measure[i],1:9]
+}
+
+lmrob_CX_outputs$measure_p_adj <- p.adjust(lmrob_CX_outputs$p, method = "BH")
+```
+
+```{r}
+lmrob_CX_outputs
+```
+
+```{r}
+dput(lmrob_CX_outputs)
+```
+
+```{r}
+model_list_CX <- model_list
+```
+
+# Non-Zero Robust mixed effects models
+robustlmm package
+
+## Mutational signatures
+### Models
+#### SBS
+##### SBS1
+```{r}
+lmrob_SBS1_nonzero <- lmrob(SBS1_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS1_data, SBS1_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS1_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS1_nonzero)
+my_qq_plot(lmrob_SBS1_nonzero)
+```
+
+
+```{r}
+tab_model(lmrob_SBS1_nonzero)
+```
+
+##### SBS2
+```{r}
+nrow(subset(lm_SBS2_data, SBS2_div10 > 0))
+```
+
+```{r}
+lmrob_SBS2_nonzero <- lmrob(SBS2_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS2_data, SBS2_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS2_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS2_nonzero)
+my_qq_plot(lmrob_SBS2_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS2_nonzero)
+```
+
+##### SBS3
+```{r}
+lmrob_SBS3_nonzero <- lmrob(SBS3_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS3_data, SBS3_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS3_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS3_nonzero)
+my_qq_plot(lmrob_SBS3_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS3_nonzero)
+```
+
+##### SBS5
+```{r}
+lmrob_SBS5_nonzero <- lmrob(SBS5_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS5_data, SBS5_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS5_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS5_nonzero)
+my_qq_plot(lmrob_SBS5_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS5_nonzero)
+```
+
+##### SBS8
+```{r}
+nrow(subset(lm_SBS8_data, SBS8_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS8_nonzero <- lmrob(SBS8_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS8_data, SBS8_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS8_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS8_nonzero)
+# my_qq_plot(lmrob_SBS8_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS8_nonzero)
+```
+
+##### SBS13
+```{r}
+nrow(subset(lm_SBS13_data, SBS13_div10 > 0))
+```
+
+```{r}
+lmrob_SBS13_nonzero <- lmrob(SBS13_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS13_data, SBS13_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS13_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS13_nonzero)
+my_qq_plot(lmrob_SBS13_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS13_nonzero)
+```
+
+##### SBS15
+```{r}
+nrow(subset(lm_SBS15_data, SBS15_div10 > 0))
+```
+
+```{r}
+lmrob_SBS15_nonzero <- lmrob(SBS15_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS15_data, SBS15_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS15_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS15_nonzero)
+my_qq_plot(lmrob_SBS15_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS15_nonzero)
+```
+
+##### SBS17a
+```{r}
+nrow(subset(lm_SBS17a_data, SBS17a_div10 > 0))
+```
+
+```{r}
+nrow(subset(lm_SBS17a_data, SBS17a_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS17a_nonzero <- lmrob(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate + SBS17a_div10, data = subset(lm_SBS17a_data, SBS17a_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS17a_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS17a_nonzero)
+# my_qq_plot(lmrob_SBS17a_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS17a_nonzero)
+```
+
+##### SBS17b
+```{r}
+# summary(subset(lm_SBS17b_data, SBS17b_div10 > 0))
+```
+```{r}
+nrow(subset(lm_SBS17b_data, SBS17b_div10 > 0))
+```
+
+
+```{r}
+# lmrob_SBS17b_nonzero <- lmrob(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate + SBS17b_div10, data = subset(lm_SBS17b_data, SBS17b_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS17b_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS17b_nonzero)
+# my_qq_plot(lmrob_SBS17b_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS17b_nonzero)
+```
+
+##### SBS18
+```{r}
+nrow(subset(lm_SBS18_data, SBS18_div10 > 0))
+```
+
+Issues with modelling - exact fit and not converging
+```{r}
+# lmrob_SBS18_nonzero <- lmrob(SBS18_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS18_data, SBS18_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS18_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS18_nonzero)
+# my_qq_plot(lmrob_SBS18_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS18_nonzero)
+```
+
+##### SBS21
+```{r}
+nrow(subset(lm_SBS21_data, SBS21_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS21_nonzero <- lmrob(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate + SBS21_div10, data = subset(lm_SBS21_data, SBS21_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS21_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS21_nonzero)
+# my_qq_plot(lmrob_SBS21_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS21_nonzero)
+```
+
+##### SBS22b
+```{r}
+nrow(subset(lm_SBS22b_data, SBS22b_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS22b_nonzero <- lmrob(SBS22b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS22b_data, SBS22b_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS22b_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS22b_nonzero)
+# my_qq_plot(lmrob_SBS22b_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS22b_nonzero)
+```
+
+##### SBS28
+```{r}
+nrow(subset(lm_SBS28_data, SBS28_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS28_nonzero <- lmrob(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate + SBS28_div10, data = subset(lm_SBS28_data, SBS28_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS28_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS28_nonzero)
+# my_qq_plot(lmrob_SBS28_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS28_nonzero)
+```
+
+##### SBS34
+```{r}
+nrow(subset(lm_SBS34_data, SBS34_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS34_nonzero <- lmrob(SBS34_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS34_data, SBS34_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS34_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS34_nonzero)
+# my_qq_plot(lmrob_SBS34_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS34_nonzero)
+```
+
+##### SBS37
+```{r}
+nrow(subset(lm_SBS37_data, SBS37_div10 > 0))
+```
+
+
+```{r}
+# lmrob_SBS37_nonzero <- lmrob(SBS37_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS37_data, SBS37_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS37_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS37_nonzero)
+# my_qq_plot(lmrob_SBS37_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS37_nonzero)
+```
+
+##### SBS38
+```{r}
+nrow(subset(lm_SBS38_data, SBS38_div10 > 0))
+```
+
+
+```{r}
+lmrob_SBS38_nonzero <- lmrob(SBS38_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS38_data, SBS38_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS38_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS38_nonzero)
+my_qq_plot(lmrob_SBS38_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS38_nonzero)
+```
+
+##### SBS40a
+```{r}
+nrow(subset(lm_SBS40a_data, SBS40a_div10 > 0))
+```
+
+```{r}
+lmrob_SBS40a_nonzero <- lmrob(SBS40a_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS40a_data, SBS40a_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS40a_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS40a_nonzero)
+my_qq_plot(lmrob_SBS40a_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS40a_nonzero)
+```
+
+##### SBS40b
+```{r}
+nrow(subset(lm_SBS40b_data, SBS40b_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS40b_nonzero <- lmrob(SBS40b_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS40b_data, SBS40b_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS40b_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS40b_nonzero)
+# my_qq_plot(lmrob_SBS40b_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS40b_nonzero)
+```
+
+##### SBS44
+```{r}
+nrow(subset(lm_SBS44_data, SBS44_div10 > 0))
+```
+
+```{r}
+lmrob_SBS44_nonzero <- lmrob(SBS44_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS44_data, SBS44_div10 > 0))
+```
+
+```{r}
+summary(lmrob_SBS44_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_SBS44_nonzero)
+my_qq_plot(lmrob_SBS44_nonzero)
+```
+
+```{r}
+tab_model(lmrob_SBS44_nonzero)
+```
+
+##### SBS52
+```{r}
+nrow(subset(lm_SBS52_data, SBS52_div10 > 0))
+```
+
+Issues with modelling - exact fit and not converging
+
+```{r}
+# lmrob_SBS52_nonzero <- lmrob(SBS52_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS52_data, SBS52_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS52_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS52_nonzero)
+# my_qq_plot(lmrob_SBS52_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS52_nonzero)
+```
+
+##### SBS54
+```{r}
+nrow(subset(lm_SBS54_data, SBS54_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS54_nonzero <- lmrob(SBS54_div10 ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_SBS54_data, SBS54_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS54_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS54_nonzero)
+# my_qq_plot(lmrob_SBS54_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS54_nonzero)
+```
+
+##### SBS96D
+```{r}
+nrow(subset(lm_SBS96D_data, SBS96D_div10 > 0))
+```
+
+```{r}
+# lmrob_SBS96D_nonzero <- lmrob(Buffa_signature_Sum_within ~ age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate + SBS96D_div10, data = subset(lm_SBS96D_data, SBS96D_div10 > 0))
+```
+
+```{r}
+# summary(lmrob_SBS96D_nonzero)
+```
+
+```{r}
+# my_point_plot(lmrob_SBS96D_nonzero)
+# my_qq_plot(lmrob_SBS96D_nonzero)
+```
+
+```{r}
+# tab_model(lmrob_SBS96D_nonzero)
+```
+
+#### SBS model p-value and coefficient table
+Make a table with all the p-values from the robustlmm SBS models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+lmrob_SBS_outputs_nonzero <- as.data.frame(matrix(nrow = 9, ncol = 12))
+colnames(lmrob_SBS_outputs_nonzero) <- c("Model","Measure","Parameter","Coefficient","SE","CI","CI_low",
+                                        "CI_high","t","df_error","p","Variable")
+lmrob_SBS_outputs_nonzero$Model <- c("lmrob_SBS1_nonzero",	
+                                     "lmrob_SBS2_nonzero",
+                                     "lmrob_SBS3_nonzero",	"lmrob_SBS5_nonzero",	#"lmrob_SBS8_nonzero",	
+                               "lmrob_SBS13_nonzero",	"lmrob_SBS15_nonzero",	#"lmrob_SBS17a_nonzero",
+                               #"lmrob_SBS17b_nonzero",
+                               # "lmrob_SBS18_nonzero",
+                               # "lmrob_SBS21_nonzero",
+                               # "lmrob_SBS22b_nonzero",
+                               # "lmrob_SBS28_nonzero",
+                               # "lmrob_SBS34_nonzero",	#"lmrob_SBS37_nonzero",
+                               "lmrob_SBS38_nonzero",
+                               "lmrob_SBS40a_nonzero",	#"lmrob_SBS40b_nonzero",	
+                               "lmrob_SBS44_nonzero"#,
+                               # "lmrob_SBS52_nonzero"#,
+                               # "lmrob_SBS54_nonzero"	,
+                               # "lmrob_SBS96D_nonzero"
+                               )
+model_list_nonzero <- list(lmrob_SBS1_nonzero,	lmrob_SBS2_nonzero,
+                           lmrob_SBS3_nonzero,	lmrob_SBS5_nonzero,	#lmrob_SBS8_nonzero,	
+                               lmrob_SBS13_nonzero,	lmrob_SBS15_nonzero,	#lmrob_SBS17a_nonzero,
+                           # lmrob_SBS17b_nonzero,
+                           # lmrob_SBS18_nonzero,
+                               # lmrob_SBS21_nonzero,
+                           # lmrob_SBS22b_nonzero,
+                           # lmrob_SBS28_nonzero,
+                           # lmrob_SBS34_nonzero,	
+                           # lmrob_SBS37_nonzero,
+                               lmrob_SBS38_nonzero,
+                           lmrob_SBS40a_nonzero,	#lmrob_SBS40b_nonzero,	
+                           lmrob_SBS44_nonzero#,
+                           # lmrob_SBS52_nonzero#,
+                               # lmrob_SBS54_nonzero,	
+                           # lmrob_SBS96D_nonzero
+                           )
+lmrob_SBS_outputs_nonzero$Variable <- c("SBS1_div10",	
+                                       "SBS2_div10",
+                                       "SBS3_div10",	"SBS5_div10",	#"SBS8_div10",	
+                               "SBS13_div10",	"SBS15_div10",	#"SBS17a_div10",	
+                               # "SBS17b_div10",
+                               # "SBS18_div10",
+                               # "SBS21_div10",
+                               # "SBS22b_div10",
+                               # "SBS28_div10",
+                               # "SBS34_div10",	
+                               # "SBS37_div10",
+                               "SBS38_div10",
+                               "SBS40a_div10",	#"SBS40b_div10",	
+                               "SBS44_div10"#,
+                               # "SBS52_div10"#,
+                               # "SBS54_div10",	
+                               # "SBS96D_div10"
+                               )
+lmrob_SBS_outputs_nonzero$Measure <- c("Buffa_signature_Sum_within",	
+                                       "Buffa_signature_Sum_within",
+                                       "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",	#"Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within",#	"Buffa_signature_Sum_within",	#"Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",	#"Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",	#"Buffa_signature_Sum_within",	
+                               "Buffa_signature_Sum_within",
+                               # "Buffa_signature_Sum_within",
+                               "Buffa_signature_Sum_within",	"Buffa_signature_Sum_within"
+                               )
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(lmrob_SBS_outputs_nonzero)){
+print(i)
+  model <- model_list_nonzero[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+
+  lmrob_SBS_outputs_nonzero[i,3:11] <- model_dat[model_dat$Parameter == lmrob_SBS_outputs_nonzero$Measure[i],1:9]
+}
+
+lmrob_SBS_outputs_nonzero$measure_p_adj <- p.adjust(lmrob_SBS_outputs_nonzero$p, method = "BH")
+```
+
+```{r}
+lmrob_SBS_outputs_nonzero
+```
+
+```{r}
+dput(lmrob_SBS_outputs_nonzero)
+```
+
+```{r}
+model_list_nonzero_SBS <- model_list_nonzero
+```
+
+#### CN Signatures
+##### Models
+###### CX1
+```{r}
+lmrob_CX1_nonzero <- lmrob(CX1_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX1_data, CX1_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX1_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX1_nonzero)
+my_qq_plot(lmrob_CX1_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX1_nonzero)
+```
+
+###### CX2
+```{r}
+lmrob_CX2_nonzero <- lmrob(CX2_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX2_data, CX2_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX2_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX2_nonzero)
+my_qq_plot(lmrob_CX2_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX2_nonzero)
+```
+
+###### CX3
+```{r}
+lmrob_CX3_nonzero <- lmrob(CX3_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX3_data, CX3_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX3_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX3_nonzero)
+my_qq_plot(lmrob_CX3_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX3_nonzero)
+```
+
+###### CX4
+```{r}
+lmrob_CX4_nonzero <- lmrob(CX4_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX4_data, CX4_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX4_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX4_nonzero)
+my_qq_plot(lmrob_CX4_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX4_nonzero)
+```
+
+###### CX5
+```{r}
+lmrob_CX5_nonzero <- lmrob(CX5_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX5_data, CX5_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX5_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX5_nonzero)
+my_qq_plot(lmrob_CX5_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX5_nonzero)
+```
+
+###### CX7
+```{r}
+lmrob_CX7_nonzero <- lmrob(CX7_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX7_data, CX7_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX7_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX7_nonzero)
+my_qq_plot(lmrob_CX7_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX7_nonzero)
+```
+
+###### CX8
+```{r}
+lmrob_CX8_nonzero <- lmrob(CX8_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX8_data, CX8_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX8_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX8_nonzero)
+my_qq_plot(lmrob_CX8_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX8_nonzero)
+```
+
+###### CX11
+```{r}
+lmrob_CX11_nonzero <- lmrob(CX11_numbers ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + tumour.purity.estimate, data = subset(lm_CX11_data, CX11_numbers > 0))
+```
+
+```{r}
+summary(lmrob_CX11_nonzero)
+```
+
+```{r}
+my_point_plot(lmrob_CX11_nonzero)
+my_qq_plot(lmrob_CX11_nonzero)
+```
+
+```{r}
+tab_model(lmrob_CX11_nonzero)
+```
+
+##### Output table
+Make a table with all the p-values from the robustlmm CX models with p-values and coefficients and adjust the p-values for plotting. 
+
+Prepare output table
+```{r}
+lmrob_CX_outputs_nonzero <- as.data.frame(matrix(nrow = 8, ncol = 12))
+colnames(lmrob_CX_outputs_nonzero) <- c("Model","Measure","Parameter","Coefficient","SE","CI","CI_low",
+                                        "CI_high","t","df_error","p","Variable")
+lmrob_CX_outputs_nonzero$Model <- c("lmrob_CX1_nonzero","lmrob_CX2_nonzero","lmrob_CX3_nonzero","lmrob_CX4_nonzero","lmrob_CX5_nonzero",
+                             "lmrob_CX7_nonzero","lmrob_CX8_nonzero","lmrob_CX11_nonzero")
+model_list_nonzero <- list(lmrob_CX1_nonzero,lmrob_CX2_nonzero,lmrob_CX3_nonzero,lmrob_CX4_nonzero,lmrob_CX5_nonzero,
+                             lmrob_CX7_nonzero,lmrob_CX8_nonzero,lmrob_CX11_nonzero)
+lmrob_CX_outputs_nonzero$Variable <- c("CX1_numbers","CX2_numbers","CX3_numbers","CX4_numbers","CX5_numbers",
+                             "CX7_numbers","CX8_numbers","CX11_numbers")
+lmrob_CX_outputs_nonzero$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                                      "Buffa_signature_Sum_within","Buffa_signature_Sum_within",
+                             "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within")
+```
+
+Make model output tables
+```{r}
+for(i in 1:nrow(lmrob_CX_outputs_nonzero)){
+
+  model <- model_list_nonzero[[i]]
+
+  model_dat <- as.data.frame(parameters::parameters(model))
+  
+  lmrob_CX_outputs_nonzero[i,3:11] <- model_dat[model_dat$Parameter == lmrob_CX_outputs_nonzero$Measure[i],1:9]
+}
+
+lmrob_CX_outputs_nonzero$measure_p_adj <- p.adjust(lmrob_CX_outputs_nonzero$p, method = "BH")
+```
+
+```{r}
+lmrob_CX_outputs_nonzero
+```
+
+```{r}
+dput(lmrob_CX_outputs_nonzero)
+```
+
+```{r}
+model_list_nonzero_CX <- model_list_nonzero
+```
+
+# Save model outputs
+## Saving coefficient tables
+```{r}
+save(lmrob_GI_outputs,
+     lmrob_SBS_outputs,
+     lmrob_CX_outputs,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/total_coefficient_tables_k10_rearranged_20251018.RData")
+```
+
+```{r}
+save(lmrob_SBS_outputs_nonzero,
+     lmrob_CX_outputs_nonzero,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/nonzero_coefficient_tables_k10_rearranged_20251018.RData")
+```
+
+## Saving models
+```{r}
+save(model_list_GI,
+     model_list_SBS,
+     model_list_CX,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/total_models_k10_rearranged_20251018.RData")
+```
+
+```{r}
+save(model_list_nonzero_SBS,
+     model_list_nonzero_CX,
+     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/nonzero_models_k10_rearranged_20251018.RData")
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
+

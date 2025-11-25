@@ -1,0 +1,1099 @@
+---
+title: "Modelling driver mutations accounting for mutation burden - TCGA"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+# Libraries used
+```{r message=FALSE, warning=FALSE}
+library(circlize)
+library(ComplexHeatmap)
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(ggsci)
+library(ggsignif)
+library(ggthemes)
+library(gridExtra)
+library(RColorBrewer)
+library(scales)
+library(xtable)
+library(lme4)
+library(lmerTest)
+library(DHARMa)
+
+options(bitmapType='cairo')
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+Heatmap parameters
+```{r}
+ht_opt$heatmap_row_names_gp = gpar(fontsize = 12)
+```
+
+# Data
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models_TCGA/"
+model_residuals_dir <- "residual_plots"
+model_objects_dir <- "model_objects"
+subscript <- "revisions_oct"
+```
+
+Read in data
+
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               drivers = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_PPCG_Drivers_pathogenic_SNV_presence_2025-10-12.txt",
+               drg36 = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_DRG36_pathogenic_SNV_presence_2025-10-12.txt",
+               drg128 = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_DRG128_pathogenic_SNV_presence_2025-10-12.txt",
+               Hallmark_hypoxia = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_Hallmark_Hypoxia_pathogenic_SNV_presence_2025-10-12.txt",
+               tcga_snv_count = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_num_SNVs_2025-10-12.txt")
+```
+
+```{r}
+load(params$ppcg_colourlist)
+```
+```{r}
+hypoxia_colours_q <- list("Q1" = "#14556e",
+                          "Q2" = "#67889a",
+                          "Q3" = "#c06842",
+                          "Q4" = "#9c2f15")
+```
+
+Parameters, here for simplicity, otherwise kept in submission script. 
+```{r}
+print(params)
+```
+
+## Combined data
+
+```{r}
+combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
+```
+
+## SNV data
+### Count
+```{r}
+tcga_snv_count <- read.delim(params$tcga_snv_count)
+```
+
+```{r}
+tcga_snv_count <- subset(tcga_snv_count, file_exists == "yes")
+```
+
+### Drivers
+```{r}
+drivers_snv <- read.delim(params$drivers)
+```
+
+```{r}
+drivers_snv <- subset(drivers_snv, file_exists == "yes")
+```
+
+Get rid of file exists column (last column)
+```{r}
+drivers_snv <- drivers_snv[,-length(colnames(drivers_snv))]
+```
+
+```{r}
+drivers_snv[is.na(drivers_snv)] <- 0
+```
+
+
+### DRG36
+```{r}
+drg36_snv <- read.delim(params$drg36)
+```
+
+```{r}
+drg36_snv <- subset(drg36_snv, file_exists == "yes")
+```
+
+Get rid of file exists column (last column)
+```{r}
+drg36_snv <- drg36_snv[,-length(colnames(drg36_snv))]
+```
+
+```{r}
+drg36_snv[is.na(drg36_snv)] <- 0
+```
+
+### DRG128
+```{r}
+drg128_snv <- read.delim(params$drg128)
+```
+
+```{r}
+drg128_snv <- subset(drg128_snv, file_exists == "yes")
+```
+
+Get rid of file exists column (last column)
+```{r}
+drg128_snv <- drg128_snv[,-length(colnames(drg128_snv))]
+```
+
+```{r}
+drg128_snv[is.na(drg128_snv)] <- 0
+```
+
+### Hallmark hypoxia
+```{r}
+hallmark_snv <- read.delim(params$Hallmark_hypoxia)
+```
+
+```{r}
+hallmark_snv <- subset(hallmark_snv, file_exists == "yes")
+```
+
+Get rid of file exists column (last column)
+```{r}
+hallmark_snv <- hallmark_snv[,-length(colnames(hallmark_snv))]
+```
+
+```{r}
+hallmark_snv[is.na(hallmark_snv)] <- 0
+```
+
+## Other data
+### Gene lists
+
+```{r}
+drg_genes_36 <- c("ATM","BAP1","BLM","BRCA1","BRCA2",
+               "BRIP1","CDH1","CDK4","CDKN2A","CHEK2",
+               "FANCA","FANCD2","FANCI","FANCL","FANCM",
+               "MLH1","MSH2","MSH6","NBN","NTHL1",
+               "PALB2","PMS2","POLD1","POLE","POT1",
+               "PTCH1","PTEN","RAD51C","RAD51D","RB1",
+               "SMAD4","SMARCA4","STK11","TP53","XPA",
+               "XPC")
+```
+
+```{r}
+drg_genes_128 <- c("AKT1","ALKBH3","APEX1","APLF","ATM",
+                   "ATR","ATRIP","BAP1","BARD1","BLM",
+                   "BRCA1","BRCA2","BRIP1","CCNH","CDC25A",
+                   "CDC25C","CDH1","CDK1","CDK2","CDK4",
+                   "CDKN2A","CHEK1","CHEK2","CLK2","DCLRE1A",
+                   "DDB1","EME1","EME2","EPCAM","ERCC2",
+                   "ERCC3","ERCC5","ERCC6","ESR2","EXO1",
+                   "FAM175A","FANCA","FANCD2","FANCI","FANCL",
+                   "FANCM","GADD45A","GEN1","GTF2H2","GTF2H3",
+                   "GTF2H4","H2AFX","HUS1","LIG1","LIG3",
+                   "LIG4","MLH1","MLH3","MMS19","MNAT1",
+                   "MPG","MRE11","MRE11A","MSH2","MSH3",
+                   "MSH5","MSH6","MSR1","NABP2","NBN",
+                   "NEIL1","NEIL2","NHEJ1","NTHL1","OGG1",
+                   "PALB2","PARP2","PER1","PER2","PMS1",
+                   "PMS2","PNKP","POLD1","POLE","POLH",
+                   "POLK","POLL","POLM","POLN","POLQ",
+                   "POT1","PRSS1","PTCH1","PTEN","RAD1",
+                   "RAD50","RAD51","RAD51B","RAD51C","RAD51D",
+                   "RAD52","RAD54B","RAD54L","RB1","RDM1",
+                   "RECQL","RECQL4","RECQL5","RINT1","RNF8",
+                   "RPA1","RPA3","SETMAR","SLX4","SMAD4",
+                   "SMARCA4","SMUG1","STK11","TDG","TDP1",
+                   "TOP2A","TOP2B","TOP3A","TP53","TP53BP1",
+                   "WRN","XAB2","XPA","XPC","XRCC1",
+                   "XRCC2","XRCC4","XRCC5")
+```
+
+```{r}
+hallmark_hypoxia <- c("ADM",      "ADORA2B",  "AK4",      "AKAP12",   "ALDOA",    "ALDOB",   
+                                     "ALDOC",    "AMPD3",    "ANGPTL4",  "ANKZF1",   "ANXA2",    "ATF3",
+                                     "ATP7A",    "B3GALT6",  "B4GALNT2", "BCAN",     "BCL2",     "BGN",
+                                     "BHLHE40",  "BNIP3L",   "BRS3",     "BTG1",     "CA12",     "CASP6",
+                                     "CAV1",     "CCNG2",    "CCRN4L",   "CDKN1A",   "CDKN1B",   "CDKN1C",
+                                     "CHST2",    "CHST3",    "CITED2",   "COL5A1",   "CP",       "CSRP2",
+                                     "CTGF",     "CXCR4",    "CXCR7",    "CYR61",    "DCN",      "DDIT3",
+                                     "DDIT4",    "DPYSL4",   "DTNA",     "DUSP1",    "EDN2",     "EFNA1",
+                                     "EFNA3",    "EGFR",     "ENO1",     "ENO2",     "ENO3",     "ERO1L",
+                                     "ERRFI1",   "ETS1",     "EXT1",     "F3",       "FAM162A",  "FBP1",
+                                     "FOS",      "FOSL2",    "FOXO3",    "GAA",      "GALK1",    "GAPDH",
+                                     "GAPDHS",   "GBE1",     "GCK",      "GCNT2",    "GLRX",     "GPC1",
+                                     "GPC3",     "GPC4",     "GPI",      "GRHPR",    "GYS1",     "HAS1",
+                                     "HDLBP",    "HEXA",     "HK1",      "HK2",      "HMOX1",    "HOXB9",
+                                     "HS3ST1",   "HSPA5",    "IDS",      "IER3",     "IGFBP1",   "IGFBP3",
+                                     "IL6",      "ILVBL",    "INHA",     "IRS2",     "ISG20",    "JMJD6",
+                                     "JUN",      "KDELR3",   "KDM3A",    "KIF5A",    "KLF6",     "KLF7",
+                                    "KLHL24",   "LALBA",    "LARGE",    "LDHA",     "LDHC",     "LOX",
+                                    "LXN",      "MAFF",     "MAP3K1",   "MIF",      "MT1E",     "MT2A",
+                                    "MXI1",     "MYH9",     "NAGK",     "NCAN",     "NDRG1",    "NDST1",
+                                    "NDST2",    "NEDD4L",   "NFIL3",    "NR3C1",    "P4HA1",    "P4HA2",
+                                    "PAM",      "PCK1",     "PDGFB",    "PDK1",     "PDK3",     "PFKFB3",
+                                    "PFKL",     "PFKP",     "PGAM2",    "PGF",      "PGK1",     "PGM1",
+                                    "PGM2",     "PHKG1",    "PIM1",     "PKLR",     "PKP1",     "PLAC8",
+                                    "PLAUR",    "PLIN2",    "PNRC1",    "PPARGC1A", "PPFIA4",   "PPP1R15A",
+                                    "PPP1R3C",  "PRDX5",    "PRKCA",    "PRKCDBP",  "PTRF",     "PYGM",
+                                    "RBPJ",     "RORA",     "RRAGD",    "S100A4",   "SAP30",    "SCARB1",
+                                    "SDC2",     "SDC3",     "SDC4",     "SELENBP1", "SERPINE1", "SIAH2",
+                                    "SLC25A1",  "SLC2A1",   "SLC2A3",   "SLC2A5",   "SLC37A4",  "SLC6A6",
+                                    "SRPX",     "STBD1",    "STC1",     "STC2",     "SULT2B1",  "TES",
+                                    "TGFB3",    "TGFBI",    "TGM2",     "TIPARP",   "TKTL1",    "TMEM45A",
+                                    "TNFAIP3",  "TPBG",     "TPD52",    "TPI1",     "TPST2",    "UGP2",
+                                    "VEGFA",    "VHL",      "VLDLR",    "WISP2",    "WSB1",     "XPNPEP1",
+                                    "ZFP36",    "ZNF292")
+```
+
+
+# Merge data and select samples
+Use Tier 1 Buffa signature sum.
+
+## Selecting tumour only and one sample per patient
+Select only tumour samples. Then only one sample per individual donor. 
+
+## Selecting tumour only and one sample per patient
+```{r}
+hypoxia_signatures_tum_data_single <- subset(combined_data, !is.na(Buffa_signature_Sum_within_quartile_extended))
+```
+
+```{r}
+hypoxia_signatures_tum_data_single <- hypoxia_signatures_tum_data_single[grep("TCGA",hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID),]
+```
+
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+Select one sample per patient by making sure it's tumour
+```{r}
+hypoxia_signatures_tum_data_single <- subset(hypoxia_signatures_tum_data_single, RNA_Sample_Type == "TUM")
+```
+
+```{r}
+length(unique(hypoxia_signatures_tum_data_single$PPCG_Donor_ID))
+```
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+<!-- Make RNA local donor ID -->
+<!-- ```{r} -->
+<!-- hypoxia_signatures_tum_data_single$RNA_Local_Donor_ID <- substr(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID,1,nchar(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID)-4) -->
+<!-- ``` -->
+
+```{r}
+hypoxia_signatures_tum_data_single <- merge(hypoxia_signatures_tum_data_single,
+                                            tcga_snv_count,
+                                            by.x = "RNA_Local_Assay_ID",
+                                            by.y = "tcga_id")
+```
+
+```{r}
+dim(hypoxia_signatures_tum_data_single)
+```
+
+# Drivers
+
+Try modelling and test for differences in scores
+```{r}
+hypoxia_signatures_tum_data_single_driver <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "Studies","num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drivers_snv,
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+
+## Continuous hypoxia
+Set up table for outputs
+```{r}
+driver_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drivers_snv)-1, ncol = 5))
+colnames(driver_hypoxia_scores) <- c("Gene","n_mutated","n_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+driver_hypoxia_scores$Gene <- colnames(drivers_snv)[2:(ncol(drivers_snv))]
+```
+
+```{r}
+for(i in 1:nrow(driver_hypoxia_scores)){
+  gene <- driver_hypoxia_scores$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_driver[,c("Buffa_signature_Sum_within",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within",
+                        "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  driver_hypoxia_scores$n_mutated[i] <- sum(sub_data$gene == 1)
+  driver_hypoxia_scores$n_wt[i] <- sum(sub_data$gene == 0)
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[2]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[2]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drivers","_continuous_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drivers","_continuous_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    driver_hypoxia_scores$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    driver_hypoxia_scores$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+}
+driver_hypoxia_scores$Hypoxia_p_adj <- p.adjust(driver_hypoxia_scores$Hypoxia_p_value, method = "BH")
+
+```
+
+```{r}
+driver_hypoxia_scores
+```
+```{r}
+write.table(driver_hypoxia_scores, file = paste0(outdir,"drivers","_continuous_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+## Q1 Q4 difference
+```{r}
+driver_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drivers_snv)-1, ncol = 7))
+colnames(driver_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+driver_hypoxia_enrichment_quart$Gene <- colnames(drivers_snv)[2:(ncol(drivers_snv))]
+
+for(i in 1:nrow(driver_hypoxia_enrichment_quart)){
+  gene <- driver_hypoxia_enrichment_quart$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_driver[,c("Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within_quartile_extended",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  table_data <- as.data.frame(table(sub_data$gene, 
+                                    sub_data$Buffa_signature_Sum_within_quartile_extended))
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[4]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[4]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drivers","_quartile_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drivers","_quartile_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    driver_hypoxia_enrichment_quart$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    driver_hypoxia_enrichment_quart$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+  if(sum(sub_data$gene == 1) > 0){
+    driver_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
+    driver_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
+  }
+    driver_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q4"))[,"Freq"]
+    driver_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q1"))[,"Freq"]
+  
+}
+
+driver_hypoxia_enrichment_quart$Hypoxia_p_adj <- p.adjust(driver_hypoxia_enrichment_quart$Hypoxia_p_value, method = "BH")
+```
+
+```{r}
+write.table(driver_hypoxia_enrichment_quart, file = paste0(outdir,"drivers","_quartile_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+drivers_snv$tcga_id <- as.factor(drivers_snv$tcga_id)
+drivers_snv <- drivers_snv %>% mutate_if(is.character, as.numeric)
+drivers_snv$tcga_id <- as.character(drivers_snv$tcga_id)
+# driver_mat[,1:ncol(driver_mat)-1] <- as.numeric(driver_mat[,1:ncol(driver_mat)-1])
+drivers_snv$any_driver_sum <- rowSums(drivers_snv[,2:ncol(drivers_snv)], )
+drivers_snv$any_driver_bin <- ifelse(drivers_snv$any_driver_sum > 0, yes = 1, no = 0)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single_driver_bin <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drivers_snv[,c("tcga_id","any_driver_sum","any_driver_bin")],
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+
+Check if mutation in any driver and continuous are related. 
+```{r}
+model_driv_continuous <- glm(any_driver_bin ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_driver_bin)
+summary(model_driv_continuous)
+```
+```{r}
+plot(model_driv_continuous)
+```
+
+Check if mutation in any driver and quartile are related.
+```{r}
+model_driv_quart <- glm(any_driver_bin ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_driver_bin)
+summary(model_driv_quart)
+```
+```{r}
+plot(model_driv_quart)
+```
+
+Check if number of mutations in driver and continuous are related.
+```{r}
+model_driv_continuous_cont <- glm(any_driver_sum ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_driver_bin)
+summary(model_driv_continuous_cont)
+```
+```{r}
+plot(model_driv_continuous_cont)
+```
+
+Check if number of mutations in driver and quartile are related.
+```{r}
+model_driv_quart_cont <- glm(any_driver_sum ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_driver_bin)
+summary(model_driv_quart_cont)
+```
+```{r}
+plot(model_driv_quart_cont)
+```
+
+------------------------------
+
+# DRG 36 Somatic
+
+```{r}
+hypoxia_signatures_tum_data_single_drg36 <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "Studies","num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drg36_snv,
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                  by.y = "tcga_id")
+```
+
+## Continuous hypoxia
+Set up table for outputs
+```{r}
+drg36_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg36_snv)-1, ncol = 5))
+colnames(drg36_hypoxia_scores) <- c("Gene","n_mutated","n_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+drg36_hypoxia_scores$Gene <- colnames(drg36_snv)[2:(ncol(drg36_snv))]
+```
+
+```{r}
+for(i in 1:nrow(drg36_hypoxia_scores)){
+  gene <- drg36_hypoxia_scores$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_drg36[,c("Buffa_signature_Sum_within",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  drg36_hypoxia_scores$n_mutated[i] <- sum(sub_data$gene == 1)
+  drg36_hypoxia_scores$n_wt[i] <- sum(sub_data$gene == 0)
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[2]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[2]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drg36s","_continuous_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drg36s","_continuous_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    drg36_hypoxia_scores$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    drg36_hypoxia_scores$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+}
+drg36_hypoxia_scores$Hypoxia_p_adj <- p.adjust(drg36_hypoxia_scores$Hypoxia_p_value, method = "BH")
+
+```
+
+```{r}
+drg36_hypoxia_scores
+```
+```{r}
+write.table(drg36_hypoxia_scores, file = paste0(outdir,"drg36s","_continuous_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+## Q1 Q4 difference
+```{r}
+drg36_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg36_snv)-1, ncol = 7))
+colnames(drg36_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+drg36_hypoxia_enrichment_quart$Gene <- colnames(drg36_snv)[2:(ncol(drg36_snv))]
+
+for(i in 1:nrow(drg36_hypoxia_enrichment_quart)){
+  gene <- drg36_hypoxia_enrichment_quart$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_drg36[,c("Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within_quartile_extended",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  table_data <- as.data.frame(table(sub_data$gene, 
+                                    sub_data$Buffa_signature_Sum_within_quartile_extended))
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[4]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[4]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drg36s","_quartile_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drg36s","_quartile_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    drg36_hypoxia_enrichment_quart$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    drg36_hypoxia_enrichment_quart$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+  if(sum(sub_data$gene == 1) > 0){
+    drg36_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
+    drg36_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
+  }
+    drg36_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q4"))[,"Freq"]
+    drg36_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q1"))[,"Freq"]
+  
+}
+
+drg36_hypoxia_enrichment_quart$Hypoxia_p_adj <- p.adjust(drg36_hypoxia_enrichment_quart$Hypoxia_p_value, method = "BH")
+```
+
+```{r}
+write.table(drg36_hypoxia_enrichment_quart, file = paste0(outdir,"drg36s","_quartile_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+drg36_snv$tcga_id <- as.factor(drg36_snv$tcga_id)
+drg36_snv <- drg36_snv %>% mutate_if(is.character, as.numeric)
+drg36_snv$tcga_id <- as.character(drg36_snv$tcga_id)
+# drg36_mat[,1:ncol(drg36_mat)-1] <- as.numeric(drg36_mat[,1:ncol(drg36_mat)-1])
+drg36_snv$any_drg36_sum <- rowSums(drg36_snv[,2:ncol(drg36_snv)], )
+drg36_snv$any_drg36_bin <- ifelse(drg36_snv$any_drg36_sum > 0, yes = 1, no = 0)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single_drg36_bin <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drg36_snv[,c("tcga_id","any_drg36_sum","any_drg36_bin")],
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+
+Check if mutation in any drg36 and continuous are related. 
+```{r}
+model_drg36_continuous <- glm(any_drg36_bin ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_drg36_bin)
+summary(model_drg36_continuous)
+```
+```{r}
+plot(model_drg36_continuous)
+```
+
+Check if mutation in any drg36 and quartile are related.
+```{r}
+model_drg36_quart <- glm(any_drg36_bin ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_drg36_bin)
+summary(model_drg36_quart)
+```
+```{r}
+plot(model_drg36_quart)
+```
+
+Check if number of mutations in drg36 and continuous are related.
+```{r}
+model_drg36_continuous_cont <- glm(any_drg36_sum ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_drg36_bin)
+summary(model_drg36_continuous_cont)
+```
+```{r}
+plot(model_drg36_continuous_cont)
+```
+
+Check if number of mutations in drg36 and quartile are related.
+```{r}
+model_drg36_quart_cont <- glm(any_drg36_sum ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_drg36_bin)
+summary(model_drg36_quart_cont)
+```
+```{r}
+plot(model_drg36_quart_cont)
+```
+
+
+# DRG 128 Somatic
+
+```{r}
+hypoxia_signatures_tum_data_single_drg128 <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drg128_snv,
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+## Continuous hypoxia
+Set up table for outputs
+```{r}
+drg128_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg128_snv)-1, ncol = 5))
+colnames(drg128_hypoxia_scores) <- c("Gene","n_mutated","n_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+drg128_hypoxia_scores$Gene <- colnames(drg128_snv)[2:(ncol(drg128_snv))]
+```
+
+```{r}
+for(i in 1:nrow(drg128_hypoxia_scores)){
+  gene <- drg128_hypoxia_scores$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_drg128[,c("Buffa_signature_Sum_within",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  drg128_hypoxia_scores$n_mutated[i] <- sum(sub_data$gene == 1)
+  drg128_hypoxia_scores$n_wt[i] <- sum(sub_data$gene == 0)
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[2]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[2]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drg128s","_continuous_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drg128s","_continuous_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    drg128_hypoxia_scores$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    drg128_hypoxia_scores$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+}
+drg128_hypoxia_scores$Hypoxia_p_adj <- p.adjust(drg128_hypoxia_scores$Hypoxia_p_value, method = "BH")
+
+```
+
+```{r}
+drg128_hypoxia_scores
+```
+```{r}
+write.table(drg128_hypoxia_scores, file = paste0(outdir,"drg128s","_continuous_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+## Q1 Q4 difference
+```{r}
+drg128_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg128_snv)-1, ncol = 7))
+colnames(drg128_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+drg128_hypoxia_enrichment_quart$Gene <- colnames(drg128_snv)[2:(ncol(drg128_snv))]
+
+for(i in 1:nrow(drg128_hypoxia_enrichment_quart)){
+  gene <- drg128_hypoxia_enrichment_quart$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_drg128[,c("Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within_quartile_extended",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  table_data <- as.data.frame(table(sub_data$gene, 
+                                    sub_data$Buffa_signature_Sum_within_quartile_extended))
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[4]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[4]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_drg128s","_quartile_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_drg128s","_quartile_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    drg128_hypoxia_enrichment_quart$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    drg128_hypoxia_enrichment_quart$Hypoxia_p_value[i] <- hypoxia_p
+  }
+  if(sum(sub_data$gene == 1) > 0){
+    drg128_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
+    drg128_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
+  }
+    drg128_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q4"))[,"Freq"]
+    drg128_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q1"))[,"Freq"]
+  
+}
+
+drg128_hypoxia_enrichment_quart$Hypoxia_p_adj <- p.adjust(drg128_hypoxia_enrichment_quart$Hypoxia_p_value, method = "BH")
+```
+
+```{r}
+write.table(drg128_hypoxia_enrichment_quart, file = paste0(outdir,"drg128s","_quartile_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+drg128_snv$tcga_id <- as.factor(drg128_snv$tcga_id)
+drg128_snv <- drg128_snv %>% mutate_if(is.character, as.numeric)
+drg128_snv$tcga_id <- as.character(drg128_snv$tcga_id)
+# drg128_mat[,1:ncol(drg128_mat)-1] <- as.numeric(drg128_mat[,1:ncol(drg128_mat)-1])
+drg128_snv$any_drg128_sum <- rowSums(drg128_snv[,2:ncol(drg128_snv)], )
+drg128_snv$any_drg128_bin <- ifelse(drg128_snv$any_drg128_sum > 0, yes = 1, no = 0)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single_drg128_bin <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   drg128_snv[,c("tcga_id","any_drg128_sum","any_drg128_bin")],
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+
+Check if mutation in any drg128 and continuous are related. 
+```{r}
+model_drg128_continuous <- glm(any_drg128_bin ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_drg128_bin)
+summary(model_drg128_continuous)
+```
+```{r}
+plot(model_drg128_continuous)
+```
+
+Check if mutation in any drg128 and quartile are related.
+```{r}
+model_drg128_quart <- glm(any_drg128_bin ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_drg128_bin)
+summary(model_drg128_quart)
+```
+```{r}
+plot(model_drg128_quart)
+```
+
+Check if number of mutations in drg128 and continuous are related.
+```{r}
+model_drg128_continuous_cont <- glm(any_drg128_sum ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_drg128_bin)
+summary(model_drg128_continuous_cont)
+```
+```{r}
+plot(model_drg128_continuous_cont)
+```
+
+Check if number of mutations in drg128 and quartile are related.
+```{r}
+model_drg128_quart_cont <- glm(any_drg128_sum ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_drg128_bin)
+summary(model_drg128_quart_cont)
+```
+```{r}
+plot(model_drg128_quart_cont)
+```
+
+# Hallmark Hypoxia Somatic
+
+```{r}
+hypoxia_signatures_tum_data_single_hallmark_hypoxia <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "Studies","num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   hallmark_snv,
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+## Continuous hypoxia
+Set up table for outputs
+```{r}
+hallmark_hypoxia_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(hallmark_snv)-1, ncol = 5))
+colnames(hallmark_hypoxia_hypoxia_scores) <- c("Gene","n_mutated","n_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+hallmark_hypoxia_hypoxia_scores$Gene <- colnames(hallmark_snv)[2:(ncol(hallmark_snv))]
+```
+
+```{r}
+for(i in 1:nrow(hallmark_hypoxia_hypoxia_scores)){
+  gene <- hallmark_hypoxia_hypoxia_scores$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_hallmark_hypoxia[,c("Buffa_signature_Sum_within",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  hallmark_hypoxia_hypoxia_scores$n_mutated[i] <- sum(sub_data$gene == 1)
+  hallmark_hypoxia_hypoxia_scores$n_wt[i] <- sum(sub_data$gene == 0)
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[2]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[2]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_hallmark_hypoxia","_continuous_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_hallmark_hypoxia","_continuous_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    hallmark_hypoxia_hypoxia_scores$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    hallmark_hypoxia_hypoxia_scores$Hypoxia_p_value[i] <- hypoxia_p
+
+  }
+}
+hallmark_hypoxia_hypoxia_scores$Hypoxia_p_adj <- p.adjust(hallmark_hypoxia_hypoxia_scores$Hypoxia_p_value, method = "BH")
+
+```
+
+```{r}
+hallmark_hypoxia_hypoxia_scores
+```
+```{r}
+write.table(hallmark_hypoxia_hypoxia_scores, file = paste0(outdir,"hallmark_hypoxia","_continuous_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+## Q1 Q4 difference
+```{r}
+hallmark_hypoxia_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(hallmark_snv)-1, ncol = 7))
+colnames(hallmark_hypoxia_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt",
+                                     "Hypoxia_coefficient","Hypoxia_p_value")
+hallmark_hypoxia_hypoxia_enrichment_quart$Gene <- colnames(hallmark_snv)[2:(ncol(hallmark_snv))]
+
+for(i in 1:nrow(hallmark_hypoxia_hypoxia_enrichment_quart)){
+  gene <- hallmark_hypoxia_hypoxia_enrichment_quart$Gene[i]
+  sub_data <- hypoxia_signatures_tum_data_single_hallmark_hypoxia[,c("Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           gene,"RNA_Local_Assay_ID")]
+  colnames(sub_data) <- c("Buffa_signature_Sum_within_quartile_extended",
+                          "num.SNVs.TCGA",
+                          "gene","RNA_Local_Assay_ID")
+  
+  table_data <- as.data.frame(table(sub_data$gene, 
+                                    sub_data$Buffa_signature_Sum_within_quartile_extended))
+  
+  if(sum(sub_data$gene == 1) > 2){
+    test_model <- glm(as.numeric(gene) ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = sub_data)
+    test_model_summary <- summary(test_model)
+    hypoxia_coefficient <- test_model_summary$coefficients[,1][[4]]
+    hypoxia_p <- test_model_summary$coefficients[,4][[4]]
+    
+    # save model in case we need to go back to it
+    saveRDS(test_model, 
+            file = paste0(outdir,model_objects_dir,"/",gene,"_hallmark_hypoxia","_quartile_hypoxia","_binomial_glm","_",subscript,".rds"))
+    
+    # save residual image
+    png(filename = paste0(outdir,model_residuals_dir,"/",gene,"_hallmark_hypoxia","_quartile_hypoxia","_residual_plots","_",subscript,".png"), 
+        width = 20, height = 10, res = 200, units = "cm")
+    plot(test_model)
+    dev.off()
+    
+    hallmark_hypoxia_hypoxia_enrichment_quart$Hypoxia_coefficient[i] <- hypoxia_coefficient
+    hallmark_hypoxia_hypoxia_enrichment_quart$Hypoxia_p_value[i] <- hypoxia_p
+  }
+  if(sum(sub_data$gene == 1) > 0){
+    hallmark_hypoxia_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
+    hallmark_hypoxia_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
+  }
+    hallmark_hypoxia_hypoxia_enrichment_quart$n_q4_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q4"))[,"Freq"]
+    hallmark_hypoxia_hypoxia_enrichment_quart$n_q1_wt[i] <- subset(table_data, (Var1 == "0") & (Var2 == "Q1"))[,"Freq"]
+  
+}
+
+hallmark_hypoxia_hypoxia_enrichment_quart$Hypoxia_p_adj <- p.adjust(hallmark_hypoxia_hypoxia_enrichment_quart$Hypoxia_p_value, method = "BH")
+```
+
+```{r}
+write.table(hallmark_hypoxia_hypoxia_enrichment_quart, file = paste0(outdir,"hallmark_hypoxia","_quartile_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+## Check mutation in group vs not
+Check if mutation in any associated gene has differences in hypoxia score
+```{r}
+hallmark_snv$tcga_id <- as.factor(hallmark_snv$tcga_id)
+hallmark_snv <- hallmark_snv %>% mutate_if(is.character, as.numeric)
+hallmark_snv$tcga_id <- as.character(hallmark_snv$tcga_id)
+# hallmark_hypoxia_mat[,1:ncol(hallmark_hypoxia_mat)-1] <- as.numeric(hallmark_hypoxia_mat[,1:ncol(hallmark_hypoxia_mat)-1])
+hallmark_snv$any_hallmark_hypoxia_sum <- rowSums(hallmark_snv[,2:ncol(hallmark_snv)], )
+hallmark_snv$any_hallmark_hypoxia_bin <- ifelse(hallmark_snv$any_hallmark_hypoxia_sum > 0, yes = 1, no = 0)
+```
+
+```{r}
+hypoxia_signatures_tum_data_single_hallmark_hypoxia_bin <- merge(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                                                         "Buffa_signature_Sum_within_quartile_extended",
+                                                           "num.SNVs.TCGA",
+                                                           "RNA_Local_Assay_ID")],
+                                                   hallmark_snv[,c("tcga_id","any_hallmark_hypoxia_sum","any_hallmark_hypoxia_bin")],
+                                                   by.x = "RNA_Local_Assay_ID",
+                                                   by.y = "tcga_id")
+```
+
+
+Check if mutation in any hallmark_hypoxia and continuous are related. 
+```{r}
+model_hallmark_hypoxia_continuous <- glm(any_hallmark_hypoxia_bin ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_hallmark_hypoxia_bin)
+summary(model_hallmark_hypoxia_continuous)
+```
+```{r}
+plot(model_hallmark_hypoxia_continuous)
+```
+
+Check if mutation in any hallmark_hypoxia and quartile are related.
+```{r}
+model_hallmark_hypoxia_quart <- glm(any_hallmark_hypoxia_bin ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = binomial, data = hypoxia_signatures_tum_data_single_hallmark_hypoxia_bin)
+summary(model_hallmark_hypoxia_quart)
+```
+```{r}
+plot(model_hallmark_hypoxia_quart)
+```
+
+Check if number of mutations in hallmark_hypoxia and continuous are related.
+```{r}
+model_hallmark_hypoxia_continuous_cont <- glm(any_hallmark_hypoxia_sum ~ Buffa_signature_Sum_within + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_hallmark_hypoxia_bin)
+summary(model_hallmark_hypoxia_continuous_cont)
+```
+```{r}
+plot(model_hallmark_hypoxia_continuous_cont)
+```
+
+Check if number of mutations in hallmark_hypoxia and quartile are related.
+```{r}
+model_hallmark_hypoxia_quart_cont <- glm(any_hallmark_hypoxia_sum ~ Buffa_signature_Sum_within_quartile_extended + log(num.SNVs.TCGA+1), 
+                        family = poisson, data = hypoxia_signatures_tum_data_single_hallmark_hypoxia_bin)
+summary(model_hallmark_hypoxia_quart_cont)
+```
+```{r}
+plot(model_hallmark_hypoxia_quart_cont)
+```
+
+
+# Output of gene set models
+```{r}
+mut_sets_annotation <- as.data.frame(c("Mutations in Drivers","Mutations in DRG36","Mutations in DRG128", "Mutations in Hallmark Hypoxia"))
+colnames(mut_sets_annotation) <- c("mutation_set")
+rownames(mut_sets_annotation) <- mut_sets_annotation$mutation_set
+mut_sets_annotation$Score_coef <- NA
+mut_sets_annotation$Score_p <- NA
+mut_sets_annotation$Quart_coef <- NA
+mut_sets_annotation$Quart_p <- NA
+```
+
+```{r}
+driv_model_summary <- summary(model_driv_continuous)
+driv_model_summary_q <- summary(model_driv_quart)
+
+mut_sets_annotation$Score_coef[1] <- driv_model_summary$coefficients[,1][[2]]
+mut_sets_annotation$Score_p[1] <- driv_model_summary$coefficients[,4][[2]]
+mut_sets_annotation$Quart_coef[1] <- driv_model_summary_q$coefficients[,1][[4]]
+mut_sets_annotation$Quart_p[1] <- driv_model_summary_q$coefficients[,4][[4]]
+```
+
+```{r}
+drg36_model_summary <- summary(model_drg36_continuous)
+drg36_model_summary_q <- summary(model_drg36_quart)
+
+mut_sets_annotation$Score_coef[2] <- drg36_model_summary$coefficients[,1][[2]]
+mut_sets_annotation$Score_p[2] <- drg36_model_summary$coefficients[,4][[2]]
+mut_sets_annotation$Quart_coef[2] <- drg36_model_summary_q$coefficients[,1][[4]]
+mut_sets_annotation$Quart_p[2] <- drg36_model_summary_q$coefficients[,4][[4]]
+```
+
+```{r}
+drg128_model_summary <- summary(model_drg128_continuous)
+drg128_model_summary_q <- summary(model_drg128_quart)
+
+mut_sets_annotation$Score_coef[3] <- drg128_model_summary$coefficients[,1][[2]]
+mut_sets_annotation$Score_p[3] <- drg128_model_summary$coefficients[,4][[2]]
+mut_sets_annotation$Quart_coef[3] <- drg128_model_summary_q$coefficients[,1][[4]]
+mut_sets_annotation$Quart_p[3] <- drg128_model_summary_q$coefficients[,4][[4]]
+```
+
+```{r}
+hallmark_hypoxia_model_summary <- summary(model_hallmark_hypoxia_continuous)
+hallmark_hypoxia_model_summary_q <- summary(model_hallmark_hypoxia_quart)
+
+mut_sets_annotation$Score_coef[4] <- hallmark_hypoxia_model_summary$coefficients[,1][[2]]
+mut_sets_annotation$Score_p[4] <- hallmark_hypoxia_model_summary$coefficients[,4][[2]]
+mut_sets_annotation$Quart_coef[4] <- hallmark_hypoxia_model_summary_q$coefficients[,1][[4]]
+mut_sets_annotation$Quart_p[4] <- hallmark_hypoxia_model_summary_q$coefficients[,4][[4]]
+```
+
+```{r}
+write.table(mut_sets_annotation, file = paste0(outdir,"gene_set","_hypoxia","_binomial_glm_summary","_",subscript,".txt"), sep = "\t", row.names = FALSE)
+```
+
+
+# Session info
+```{r}
+sessionInfo()
+```
+

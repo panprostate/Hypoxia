@@ -1,0 +1,277 @@
+---
+title: "Summarising CNAs in TCGA"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+# Libraries
+```{r}
+
+```
+
+# Data
+```{r}
+params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
+               drivers = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__driverGenes.txt",
+               tcga_sheet = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/gdc_sample_sheet.2025-09-30.tsv",
+               tcga_location = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/",
+               outdir = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/")
+```
+
+## PPCG
+
+## Driver data
+Data release version: 4
+
+Date: 2023-09-25
+
+Source: Juri Reimand - FTP box
+
+/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__driverGenes.txt
+```{r}
+driver_data <- read.delim(params$drivers, row.names = 1, sep = "\t", header = TRUE)
+```
+
+## TCGA
+Sample sheet
+```{r}
+tcga_sample_sheet <- read.delim(params$tcga_sheet, header = TRUE)
+```
+
+## Genes
+```{r}
+driver_genes <- rownames(driver_data)
+remove(driver_data)
+```
+
+```{r}
+drg_genes_36 <- c("ATM","BAP1","BLM","BRCA1","BRCA2",
+                  "BRIP1","CDH1","CDK4","CDKN2A","CHEK2",
+                  "FANCA","FANCD2","FANCI","FANCL","FANCM",
+                  "MLH1","MSH2","MSH6","NBN","NTHL1",
+                  "PALB2","PMS2","POLD1","POLE","POT1",
+                  "PTCH1","PTEN","RAD51C","RAD51D","RB1",
+                  "SMAD4","SMARCA4","STK11","TP53","XPA",
+                  "XPC")
+```
+
+```{r}
+drg_genes_128 <- c("AKT1","ALKBH3","APEX1","APLF","ATM",
+                   "ATR","ATRIP","BAP1","BARD1","BLM",
+                   "BRCA1","BRCA2","BRIP1","CCNH","CDC25A",
+                   "CDC25C","CDH1","CDK1","CDK2","CDK4",
+                   "CDKN2A","CHEK1","CHEK2","CLK2","DCLRE1A",
+                   "DDB1","EME1","EME2","EPCAM","ERCC2",
+                   "ERCC3","ERCC5","ERCC6","ESR2","EXO1",
+                   "FAM175A","FANCA","FANCD2","FANCI","FANCL",
+                   "FANCM","GADD45A","GEN1","GTF2H2","GTF2H3",
+                   "GTF2H4","H2AFX","HUS1","LIG1","LIG3",
+                   "LIG4","MLH1","MLH3","MMS19","MNAT1",
+                   "MPG","MRE11","MRE11A","MSH2","MSH3",
+                   "MSH5","MSH6","MSR1","NABP2","NBN",
+                   "NEIL1","NEIL2","NHEJ1","NTHL1","OGG1",
+                   "PALB2","PARP2","PER1","PER2","PMS1",
+                   "PMS2","PNKP","POLD1","POLE","POLH",
+                   "POLK","POLL","POLM","POLN","POLQ",
+                   "POT1","PRSS1","PTCH1","PTEN","RAD1",
+                   "RAD50","RAD51","RAD51B","RAD51C","RAD51D",
+                   "RAD52","RAD54B","RAD54L","RB1","RDM1",
+                   "RECQL","RECQL4","RECQL5","RINT1","RNF8",
+                   "RPA1","RPA3","SETMAR","SLX4","SMAD4",
+                   "SMARCA4","SMUG1","STK11","TDG","TDP1",
+                   "TOP2A","TOP2B","TOP3A","TP53","TP53BP1",
+                   "WRN","XAB2","XPA","XPC","XRCC1",
+                   "XRCC2","XRCC4","XRCC5")
+```
+
+```{r}
+hallmark_hypoxia <- c("ADM",      "ADORA2B",  "AK4",      "AKAP12",   "ALDOA",    "ALDOB",   
+                      "ALDOC",    "AMPD3",    "ANGPTL4",  "ANKZF1",   "ANXA2",    "ATF3",
+                      "ATP7A",    "B3GALT6",  "B4GALNT2", "BCAN",     "BCL2",     "BGN",
+                      "BHLHE40",  "BNIP3L",   "BRS3",     "BTG1",     "CA12",     "CASP6",
+                      "CAV1",     "CCNG2",    "CCRN4L",   "CDKN1A",   "CDKN1B",   "CDKN1C",
+                      "CHST2",    "CHST3",    "CITED2",   "COL5A1",   "CP",       "CSRP2",
+                      "CTGF",     "CXCR4",    "CXCR7",    "CYR61",    "DCN",      "DDIT3",
+                      "DDIT4",    "DPYSL4",   "DTNA",     "DUSP1",    "EDN2",     "EFNA1",
+                      "EFNA3",    "EGFR",     "ENO1",     "ENO2",     "ENO3",     "ERO1L",
+                      "ERRFI1",   "ETS1",     "EXT1",     "F3",       "FAM162A",  "FBP1",
+                      "FOS",      "FOSL2",    "FOXO3",    "GAA",      "GALK1",    "GAPDH",
+                      "GAPDHS",   "GBE1",     "GCK",      "GCNT2",    "GLRX",     "GPC1",
+                      "GPC3",     "GPC4",     "GPI",      "GRHPR",    "GYS1",     "HAS1",
+                      "HDLBP",    "HEXA",     "HK1",      "HK2",      "HMOX1",    "HOXB9",
+                      "HS3ST1",   "HSPA5",    "IDS",      "IER3",     "IGFBP1",   "IGFBP3",
+                      "IL6",      "ILVBL",    "INHA",     "IRS2",     "ISG20",    "JMJD6",
+                      "JUN",      "KDELR3",   "KDM3A",    "KIF5A",    "KLF6",     "KLF7",
+                      "KLHL24",   "LALBA",    "LARGE",    "LDHA",     "LDHC",     "LOX",
+                      "LXN",      "MAFF",     "MAP3K1",   "MIF",      "MT1E",     "MT2A",
+                      "MXI1",     "MYH9",     "NAGK",     "NCAN",     "NDRG1",    "NDST1",
+                      "NDST2",    "NEDD4L",   "NFIL3",    "NR3C1",    "P4HA1",    "P4HA2",
+                      "PAM",      "PCK1",     "PDGFB",    "PDK1",     "PDK3",     "PFKFB3",
+                      "PFKL",     "PFKP",     "PGAM2",    "PGF",      "PGK1",     "PGM1",
+                      "PGM2",     "PHKG1",    "PIM1",     "PKLR",     "PKP1",     "PLAC8",
+                      "PLAUR",    "PLIN2",    "PNRC1",    "PPARGC1A", "PPFIA4",   "PPP1R15A",
+                      "PPP1R3C",  "PRDX5",    "PRKCA",    "PRKCDBP",  "PTRF",     "PYGM",
+                      "RBPJ",     "RORA",     "RRAGD",    "S100A4",   "SAP30",    "SCARB1",
+                      "SDC2",     "SDC3",     "SDC4",     "SELENBP1", "SERPINE1", "SIAH2",
+                      "SLC25A1",  "SLC2A1",   "SLC2A3",   "SLC2A5",   "SLC37A4",  "SLC6A6",
+                      "SRPX",     "STBD1",    "STC1",     "STC2",     "SULT2B1",  "TES",
+                      "TGFB3",    "TGFBI",    "TGM2",     "TIPARP",   "TKTL1",    "TMEM45A",
+                      "TNFAIP3",  "TPBG",     "TPD52",    "TPI1",     "TPST2",    "UGP2",
+                      "VEGFA",    "VHL",      "VLDLR",    "WISP2",    "WSB1",     "XPNPEP1",
+                      "ZFP36",    "ZNF292")
+```
+
+# Pick TCGA gene level CNA files samples
+
+```{r}
+tcga_cnas <- subset(tcga_sample_sheet, Data.Type == "Gene Level Copy Number")
+tcga_cnas <- tcga_cnas[grep("ascat3.gene_level_copy_number.v36.tsv",tcga_cnas$File.Name),]
+```
+```{r}
+tcga_cnas$tumour_sample <- ifelse(tcga_cnas$Tissue.Type == "Tumor, Normal", yes =  gsub(",.*","",tcga_cnas$Sample.ID), no = gsub(".*, ","",tcga_cnas$Sample.ID))
+```
+
+
+# Create summary data frames
+
+```{r}
+drg36_tcga_cna_df <- as.data.frame(matrix(nrow = nrow(tcga_cnas), ncol = length(drg_genes_36)+2, data = NA))
+colnames(drg36_tcga_cna_df) <- c("tcga_id",drg_genes_36,"file_exists")
+drg36_tcga_cna_df$tcga_id <- tcga_cnas$tumour_sample
+```
+
+```{r}
+drg128_tcga_cna_df <- as.data.frame(matrix(nrow = nrow(tcga_cnas), ncol = length(drg_genes_128)+2, data = NA))
+colnames(drg128_tcga_cna_df) <- c("tcga_id",drg_genes_128,"file_exists")
+drg128_tcga_cna_df$tcga_id <- tcga_cnas$tumour_sample
+```
+
+```{r}
+driver_tcga_cna_df <- as.data.frame(matrix(nrow = nrow(tcga_cnas), ncol = length(driver_genes)+2, data = NA))
+colnames(driver_tcga_cna_df) <- c("tcga_id",driver_genes,"file_exists")
+driver_tcga_cna_df$tcga_id <- tcga_cnas$tumour_sample
+```
+
+```{r}
+hh_tcga_cna_df <- as.data.frame(matrix(nrow = nrow(tcga_cnas), ncol = length(hallmark_hypoxia)+2, data = NA))
+colnames(hh_tcga_cna_df) <- c("tcga_id",hallmark_hypoxia,"file_exists")
+hh_tcga_cna_df$tcga_id <- tcga_cnas$tumour_sample
+```
+
+# Fill in dfs
+```{r}
+for(i in 1:nrow(tcga_cnas)){
+  filename <- paste0(params$tcga_location, tcga_cnas$File.ID[i], "/", tcga_cnas$File.Name[i])
+  if(file.exists(filename)){
+    drg36_tcga_cna_df$file_exists[i] <- "yes"
+    drg128_tcga_cna_df$file_exists[i] <- "yes"
+    driver_tcga_cna_df$file_exists[i] <- "yes"
+    hh_tcga_cna_df$file_exists[i] <- "yes"
+    
+    sample_cna <- read.delim(filename, comment.char = "#")
+    average_stat <- round(mean(sample_cna$copy_number, na.rm = TRUE))
+    
+    if(average_stat > 2){
+      ploidy <- 4
+    }else{
+      ploidy <- 2
+    }
+    
+    # create relative copy number w.r.t. ploidy status
+    sample_cna$relative_cn <- sample_cna$copy_number - ploidy
+    
+    
+    for(j in 1:length(drg_genes_36)){
+      if(drg_genes_36[j] %in% sample_cna$gene_name){
+        gene_cn <- sample_cna$relative_cn[sample_cna$gene_name == drg_genes_36[j]]
+        
+        if(!is.na(gene_cn)){
+          if(gene_cn == 0){
+            drg36_tcga_cna_df[i,j+1] <- "Neutral"
+          }else if(gene_cn > 0){
+            drg36_tcga_cna_df[i,j+1] <- "Gain"
+          }else if(gene_cn < 0){
+            drg36_tcga_cna_df[i,j+1] <- "Loss"
+          }
+        }
+        
+      }
+    }
+    for(k in 1:length(drg_genes_128)){
+      if(drg_genes_128[k] %in% sample_cna$gene_name){
+        gene_cn <- sample_cna$relative_cn[sample_cna$gene_name == drg_genes_128[k]]
+        
+        if(!is.na(gene_cn)){
+          if(gene_cn == 0){
+            drg128_tcga_cna_df[i,k+1] <- "Neutral"
+          }else if(gene_cn > 0){
+            drg128_tcga_cna_df[i,k+1] <- "Gain"
+          }else if(gene_cn < 0){
+            drg128_tcga_cna_df[i,k+1] <- "Loss"
+          }
+        }
+        
+      }
+    }
+    for(l in 1:length(driver_genes)){
+      if(driver_genes[l] %in% sample_cna$gene_name){
+        gene_cn <- sample_cna$relative_cn[sample_cna$gene_name == driver_genes[l]]
+        
+        if(!is.na(gene_cn)){
+          if(gene_cn == 0){
+            driver_tcga_cna_df[i,l+1] <- "Neutral"
+          }else if(gene_cn > 0){
+            driver_tcga_cna_df[i,l+1] <- "Gain"
+          }else if(gene_cn < 0){
+            driver_tcga_cna_df[i,l+1] <- "Loss"
+          }
+        }
+        
+      }
+    }
+    for(m in 1:length(hallmark_hypoxia)){
+      if(hallmark_hypoxia[m] %in% sample_cna$gene_name){
+        gene_cn <- sample_cna$relative_cn[sample_cna$gene_name == hallmark_hypoxia[m]]
+        
+        if(!is.na(gene_cn)){
+          if(gene_cn == 0){
+            hh_tcga_cna_df[i,m+1] <- "Neutral"
+          }else if(gene_cn > 0){
+            hh_tcga_cna_df[i,m+1] <- "Gain"
+          }else if(gene_cn < 0){
+            hh_tcga_cna_df[i,m+1] <- "Loss"
+          }
+        }
+        
+      }
+    }
+    
+  }else{
+    drg36_tcga_cna_df$file_exists[i] <- "no"
+    drg128_tcga_cna_df$file_exists[i] <- "no"
+    drivers_tcga_cna_df$file_exists[i] <- "no"
+    hh_tcga_cna_df$file_exists[i] <- "no"
+  }
+}
+```
+
+# Save dfs
+```{r}
+write.table(drg36_tcga_cna_df, file = paste0(params$outdir,"TCGA_PRAD_DRG36_pathogenic_CNA_presence_",Sys.Date(),".txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+write.table(drg128_tcga_cna_df, file = paste0(params$outdir,"TCGA_PRAD_DRG128_pathogenic_CNA_presence_",Sys.Date(),".txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+write.table(driver_tcga_cna_df, file = paste0(params$outdir,"TCGA_PRAD_PPCG_Drivers_pathogenic_CNA_presence_",Sys.Date(),".txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+write.table(hh_tcga_cna_df, file = paste0(params$outdir,"TCGA_PRAD_Hallmark_Hypoxia_pathogenic_CNA_presence_",Sys.Date(),".txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+```
+
+
+# Session info
+```{r}
+sessionInfo()
+```
