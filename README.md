@@ -4,5 +4,5 @@ This repository contains code used for the publication "Hypoxia Spurs Evolution 
 
 ## Structure and Content of this repository
 
-The [Preparation](https://github.com/panprostate/Hypoxia/tree/main/Preparation) folder contains scripts used to calculate hypoxia signatures, perform gene set enrichment analyses, and combining the data used in this paper into a single data frame. The [Analysis_and_Figures](https://github.com/panprostate/Hypoxia/tree/main/Analysis_and_Figures) folder contains scripts to reproduce the figures and analyses described in the paper.
+The [Preparation](https://github.com/panprostate/Hypoxia/tree/main/Preparation) folder contains scripts used to calculate hypoxia signatures, perform gene set enrichment analyses, and combining the data used in this paper into a single data frame. The [Analysis_and_Figures](https://github.com/panprostate/Hypoxia/tree/main/Analysis_and_Figures) folder contains scripts to reproduce the figures and analyses described in the paper. The [TCGA](https://github.com/panprostate/Hypoxia/tree/main/TCGA) folder contains scripts to reproduce the TCGA analysis. 
 
