@@ -1156,7 +1156,7 @@ all_coefficients_combined_bin_quart <- c(gene_sets_binom_coefficients$Quart_coef
 ```
 ```{r}
 coefficient_colours_total <- colorRamp2(c(-1,
-                                          0.0000000001,
+                                          -0.0000000001,
                                     0,
                                     0.0000000001,
                                     0.5,
