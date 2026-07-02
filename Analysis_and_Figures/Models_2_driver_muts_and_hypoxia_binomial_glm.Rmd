@@ -36,7 +36,7 @@ ht_opt$heatmap_row_names_gp = gpar(fontsize = 12)
 
 # Data
 ```{r}
-outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models/"
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/driver_models/"
 model_residuals_dir <- "residual_plots"
 model_objects_dir <- "model_objects"
 subscript <- "revisions"
@@ -46,7 +46,7 @@ Read in data
 
 ```{r}
 params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
-               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt",
                drivers = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Drivers/Somatic_drivers/DRIVER_ANNOTATIONS__2023-09-25_release4/DRIVER_ANNOTATIONS__2023-09-25_release4__SNV+indel__filteredVariants__allGenes.txt")
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: "Manuscript Revision, Figure 1. RNA data release 1.4k10prerelease - TCGA"
+title: "Figure 1. RNA data release 1.4k10prerelease - TCGA"
 author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
@@ -41,22 +41,38 @@ Read in data
 
 ```{r}
 params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
-               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt",
                drivers ="/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_PPCG_Drivers_pathogenic_SNV_presence_2025-10-12.txt",
                drg36 = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_DRG36_pathogenic_SNV_presence_2025-10-12.txt",
                drg128 = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_DRG128_pathogenic_SNV_presence_2025-10-12.txt",
                Hallmark_hypoxia = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_Hallmark_Hypoxia_pathogenic_SNV_presence_2025-10-12.txt",
                rel_cna = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_PPCG_Drivers_pathogenic_CNA_presence_2025-10-12.txt",
-               total_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/total_coefficient_tables_k10_rearranged_20251018.RData",
-               nonzero_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/nonzero_coefficient_tables_k10_rearranged_20251018.RData",
-               driver_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models_TCGA/drivers_continuous_hypoxia_binomial_glm_summary_revisions_oct.txt",
-               driver_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models_TCGA/drivers_quartile_hypoxia_binomial_glm_summary_revisions_oct.txt",
-               gene_set_bionm_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/driver_models_TCGA/gene_set_hypoxia_binomial_glm_summary_revisions_oct.txt",
+               total_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/TCGA_analysis/lmrob_outputs/total_coefficient_tables_k10_rearranged_2026-05-31.RData",
+               nonzero_model_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/TCGA_analysis/lmrob_outputs/nonzero_coefficient_tables_k10_rearranged_2026-05-31.RData",
+               driver_continuous_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/driver_models_TCGA/drivers_continuous_hypoxia_binomial_glm_summary_final.txt",
+               driver_quartile_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/driver_models_TCGA/drivers_quartile_hypoxia_binomial_glm_summary_final.txt",
+               gene_set_bionm_coefs = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/driver_models_TCGA/gene_set_hypoxia_binomial_glm_summary_final.txt",
                TCGA_CX = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/CINSignature_Activities_THRESH95_TCGA-PRAD-WGS_Jun2026.tsv",
                TCGA_ascat_CX = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/tcga_prad_wgs_ascat_segments.rds",
                TCGA_SBS = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/PPCG_SBS96_assigned_to_TCGA_samples/Assignment_Solution/Activities/Assignment_Solution_Activities.txt",
                TCGA_FGA = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/TCGA_PRAD_cBioPortal_Fraction_Genome_Altered.txt",
                tcga_snv_count = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/TCGA_PRAD_num_SNVs_2025-10-12.txt")
+```
+
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/"
+```
+
+```{r}
+fig_outdir_supp <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figures/"
+```
+
+```{r}
+supp_fig_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figure_Data/"
+```
+
+```{r}
+supp_tab_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Table_Data/"
 ```
 
 ```{r}
@@ -409,8 +425,8 @@ kruskal.test(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
 ```
 
 ```{r}
-wilcox_isup_grade_stats <- as.data.frame(matrix(nrow = 10, ncol = 6))
-colnames(wilcox_isup_grade_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted")
+wilcox_isup_grade_stats <- as.data.frame(matrix(nrow = 10, ncol = 9))
+colnames(wilcox_isup_grade_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted", "wilcox_w", "wilcox_L95", "wilcox_U95")
 wilcox_isup_grade_stats$Status_1 <- c(rep("1",4),rep("2",3),rep("3",2),"4")
 wilcox_isup_grade_stats$Status_2 <- c("2","3","4","5",
                                       "3","4","5",
@@ -425,7 +441,24 @@ for(i in 1:nrow(wilcox_isup_grade_stats)){
   wilcox_isup_grade_stats$wilcox_p[i] <- wilcox.test(subset(hypoxia_signatures_tum_data_single, 
                                                             ISUP_Grade == wilcox_isup_grade_stats$Status_1[i])$Buffa_signature_Sum_within,
                                                      subset(hypoxia_signatures_tum_data_single, 
-                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within)[[3]]
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within,
+                                                     conf.int = TRUE)[[3]]
+  
+  wilcox_isup_grade_stats$wilcox_w[i] <- wilcox.test(subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within,
+                                                     conf.int = TRUE)[[1]]
+  wilcox_isup_grade_stats$wilcox_L95[i] <- wilcox.test(subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within,
+                                                     conf.int = TRUE)[[8]][1]
+  wilcox_isup_grade_stats$wilcox_U95[i] <- wilcox.test(subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(hypoxia_signatures_tum_data_single, 
+                                                            ISUP_Grade == wilcox_isup_grade_stats$Status_2[i])$Buffa_signature_Sum_within,
+                                                     conf.int = TRUE)[[8]][2]
 }
 
 wilcox_isup_grade_stats$wilcox_p_adjusted <- p.adjust(wilcox_isup_grade_stats$wilcox_p, method = "BH")
@@ -511,7 +544,12 @@ patient_stat_table$p_val <- c(kruskal.test(hypoxia_signatures_tum_data_single$Bu
                                        hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
                                        method = "spearman")$p.value
                               )
-patient_stat_table$Further_info <- c("",
+patient_stat_table$Further_info <- c(paste0("Kruskal-Wallis chi-squared = ",
+                                            kruskal.test(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                           hypoxia_signatures_tum_data_single$ISUP_Grade)[[1]],
+                                           "; df = ", 
+                                           kruskal.test(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
+                                           hypoxia_signatures_tum_data_single$ISUP_Grade)[[2]]),
                                      paste0("Spearman $\\rho$ = ",round(cor.test(hypoxia_signatures_tum_data_single$age_at_tumour_collection,
                                        hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within,
                                        method = "spearman")$estimate[[1]], digits = 3)),
@@ -524,6 +562,11 @@ Print latex style table
 ```{r}
 xtable(patient_stat_table,
        display = c("s","s","s","d","e","s"))
+```
+
+```{r}
+write.csv(patient_stat_table,
+          file = paste0(supp_tab_data_outdir,"Supplementary_table_9_data.csv"))
 ```
 
 
@@ -551,8 +594,8 @@ driver_data[is.na(driver_data)] <- 0
 
 Test for differences in scores
 ```{r}
-driver_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(driver_data)-1, ncol = 5))
-colnames(driver_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+driver_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(driver_data)-1, ncol = 8))
+colnames(driver_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj", "wilcox_w", "wilcox_L95", "wilcox_U95")
 driver_hypoxia_scores$Gene <- colnames(driver_data[,-1])
 
 for(i in 1:nrow(driver_hypoxia_scores)){
@@ -566,7 +609,18 @@ for(i in 1:nrow(driver_hypoxia_scores)){
   table_data <- as.data.frame(table(test_data$Test_gene))
   if(nrow(table_data) > 1){
     driver_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
-                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"])[[3]]
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[3]]
+    
+    driver_hypoxia_scores$wilcox_w[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[1]]
+    driver_hypoxia_scores$wilcox_L95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[8]][1]
+    driver_hypoxia_scores$wilcox_U95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[8]][2]
   
     driver_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "1"))
     driver_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "0"))
@@ -596,8 +650,8 @@ head(driver_hypoxia_scores)
 
 ## Q1 Q4 difference
 ```{r}
-driver_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(driver_data)-1, ncol = 8))
-colnames(driver_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+driver_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(driver_data)-1, ncol = 10))
+colnames(driver_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio", "fisher_L95", "fisher_U95")
 driver_hypoxia_enrichment_quart$Gene <- colnames(driver_data[,-1])
 
 for(i in 1:nrow(driver_hypoxia_enrichment_quart)){
@@ -614,7 +668,8 @@ for(i in 1:nrow(driver_hypoxia_enrichment_quart)){
     driver_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[1]]
     driver_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[3]]
   
-  
+    driver_hypoxia_enrichment_quart$fisher_L95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][1]
+    driver_hypoxia_enrichment_quart$fisher_U95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][2]
   
     driver_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
     driver_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
@@ -673,7 +728,8 @@ summary_somatic_driver <- merge(summary_somatic_driver,
 
 ```{r}
 wilcox.test(subset(summary_somatic_driver, bin_muts_in_driver == "Mutation")[,"Buffa_signature_Sum_within"], 
-            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"])
+            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"],
+            conf.int = TRUE)
 ```
 
 ```{r}
@@ -690,7 +746,8 @@ table(summary_somatic_driver_q1q4$bin_muts_in_driver,
 
 ```{r}
 wilcox.test(subset(summary_somatic_driver, bin_muts_in_driver == "Mutation")[,"Buffa_signature_Sum_within"], 
-            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"])
+            subset(summary_somatic_driver, bin_muts_in_driver == "No Mutation")[,"Buffa_signature_Sum_within"],
+            conf.int = TRUE)
 ```
 
 # DRG 36 Somatic
@@ -703,8 +760,8 @@ drg36_data[is.na(drg36_data)] <- 0
 ```
 ## Test for differences in scores
 ```{r}
-drg36_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg36_data)-1, ncol = 5))
-colnames(drg36_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+drg36_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg36_data)-1, ncol = 8))
+colnames(drg36_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj", "wilcox_w", "wilcox_L95", "wilcox_U95")
 drg36_hypoxia_scores$Gene <- colnames(drg36_data[,-1])
 
 for(i in 1:nrow(drg36_hypoxia_scores)){
@@ -718,7 +775,18 @@ for(i in 1:nrow(drg36_hypoxia_scores)){
   table_data <- as.data.frame(table(test_data$Test_gene))
   if(nrow(table_data) > 1){
     drg36_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
-                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"])[[3]]
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                        conf.int = TRUE)[[3]]
+    
+    drg36_hypoxia_scores$wilcox_w[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                        conf.int = TRUE)[[1]]
+    drg36_hypoxia_scores$wilcox_L95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                        conf.int = TRUE)[[8]][1]
+    drg36_hypoxia_scores$wilcox_U95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                        conf.int = TRUE)[[8]][2]
   
     drg36_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "1"))
     drg36_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "0"))
@@ -748,8 +816,8 @@ head(drg36_hypoxia_scores)
 
 ## Q1 Q4 difference
 ```{r}
-drg36_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg36_data)-1, ncol = 8))
-colnames(drg36_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+drg36_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg36_data)-1, ncol = 10))
+colnames(drg36_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio", "fisher_L95", "fisher_U95")
 drg36_hypoxia_enrichment_quart$Gene <- colnames(drg36_data[,-1])
 
 for(i in 1:nrow(drg36_hypoxia_enrichment_quart)){
@@ -766,7 +834,8 @@ for(i in 1:nrow(drg36_hypoxia_enrichment_quart)){
     drg36_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[1]]
     drg36_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[3]]
   
-  
+    drg36_hypoxia_enrichment_quart$fisher_L95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][1]
+    drg36_hypoxia_enrichment_quart$fisher_U95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][2]
   
     drg36_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
     drg36_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
@@ -814,7 +883,8 @@ summary_somatic_drg36 <- merge(summary_somatic_drg36,
 
 ```{r}
 wilcox.test(subset(summary_somatic_drg36, bin_muts_in_drg36 == "Mutation")[,"Buffa_signature_Sum_within"], 
-            subset(summary_somatic_drg36, bin_muts_in_drg36 == "No Mutation")[,"Buffa_signature_Sum_within"])
+            subset(summary_somatic_drg36, bin_muts_in_drg36 == "No Mutation")[,"Buffa_signature_Sum_within"],
+            conf.int = TRUE)
 ```
 
 ```{r}
@@ -842,8 +912,8 @@ drg128_data[is.na(drg128_data)] <- 0
 
 ## Test for differences in scores
 ```{r}
-drg128_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg128_data)-1, ncol = 5))
-colnames(drg128_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj")
+drg128_hypoxia_scores <- as.data.frame(matrix(nrow = ncol(drg128_data)-1, ncol = 8))
+colnames(drg128_hypoxia_scores) <- c("Gene","n_mutated","n_wt","wilcox_p_val","wilcox_p_adj", "wilcox_w", "wilcox_L95", "wilcox_U95")
 drg128_hypoxia_scores$Gene <- colnames(drg128_data[,-1])
 
 for(i in 1:nrow(drg128_hypoxia_scores)){
@@ -857,7 +927,18 @@ for(i in 1:nrow(drg128_hypoxia_scores)){
   table_data <- as.data.frame(table(test_data$Test_gene))
   if(nrow(table_data) > 1){
     drg128_hypoxia_scores$wilcox_p_val[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
-                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"])[[3]]
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[3]]
+    
+    drg128_hypoxia_scores$wilcox_w[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[1]]
+    drg128_hypoxia_scores$wilcox_L95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[8]][1]
+    drg128_hypoxia_scores$wilcox_U95[i] <- wilcox.test(subset(test_data, Test_gene == "1")[,"Buffa_signature_Sum_within"],
+                                                         subset(test_data, Test_gene == "0")[,"Buffa_signature_Sum_within"],
+                                                         conf.int = TRUE)[[8]][2]
   
     drg128_hypoxia_scores$n_mutated[i] <- nrow(subset(test_data, Test_gene == "1"))
     drg128_hypoxia_scores$n_wt[i] <- nrow(subset(test_data, Test_gene == "0"))
@@ -887,8 +968,8 @@ head(drg128_hypoxia_scores)
 
 ## Q1 Q4 difference
 ```{r}
-drg128_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg128_data)-1, ncol = 8))
-colnames(drg128_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio")
+drg128_hypoxia_enrichment_quart <- as.data.frame(matrix(nrow = ncol(drg128_data)-1, ncol = 10))
+colnames(drg128_hypoxia_enrichment_quart) <- c("Gene","n_q4_mutated","n_q1_mutated","n_q4_wt","n_q1_wt","fisher_p_val","fisher_p_adj","odds_ratio", "fisher_L95", "fisher_U95")
 drg128_hypoxia_enrichment_quart$Gene <- colnames(drg128_data[,-1])
 
 for(i in 1:nrow(drg128_hypoxia_enrichment_quart)){
@@ -905,7 +986,8 @@ for(i in 1:nrow(drg128_hypoxia_enrichment_quart)){
     drg128_hypoxia_enrichment_quart$fisher_p_val[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[1]]
     drg128_hypoxia_enrichment_quart$odds_ratio[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[3]]
   
-  
+    drg128_hypoxia_enrichment_quart$fisher_L95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][1]
+    drg128_hypoxia_enrichment_quart$fisher_U95[i] <- fisher.test(table(test_data$Test_gene, test_data$Buffa_signature_Sum_within_quartile_extended))[[2]][2]
   
     drg128_hypoxia_enrichment_quart$n_q4_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q4"))[,"Freq"]
     drg128_hypoxia_enrichment_quart$n_q1_mutated[i] <- subset(table_data, (Var1 == "1") & (Var2 == "Q1"))[,"Freq"]
@@ -953,7 +1035,8 @@ summary_somatic_drg128 <- merge(summary_somatic_drg128,
 
 ```{r}
 wilcox.test(subset(summary_somatic_drg128, bin_muts_in_drg128 == "Mutation")[,"Buffa_signature_Sum_within"], 
-            subset(summary_somatic_drg128, bin_muts_in_drg128 == "No Mutation")[,"Buffa_signature_Sum_within"])
+            subset(summary_somatic_drg128, bin_muts_in_drg128 == "No Mutation")[,"Buffa_signature_Sum_within"],
+            conf.int = TRUE)
 ```
 
 ```{r}
@@ -1175,6 +1258,13 @@ xtable(lmrob_SBS_annotations[,c("SBS_list","Coefficient_total","CI_low_total","C
                          "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")], display = c("s","s","e","e","e","e","e","e","e","e","e","e"))
 ```
 
+```{r}
+write.csv(lmrob_SBS_annotations[,c("SBS_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
+                         "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")],
+          file = paste0(supp_tab_data_outdir,"Supplementary_table_10_sbs_data.csv"))
+```
+
+
 Rearrange
 ```{r}
 lmrob_SBS_annotations <- lmrob_SBS_annotations[sbs_sig_columns,]
@@ -1235,6 +1325,12 @@ rownames(lmrob_CX_annotations) <- lmrob_CX_annotations$CX_list
 xtable(lmrob_CX_annotations[,c("CX_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
                          "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")],
        , display = c("s","s","e","e","e","e","e","e","e","e","e","e"))
+```
+
+```{r}
+write.csv(lmrob_CX_annotations[,c("CX_list","Coefficient_total","CI_low_total","CI_high_total","p_total","measure_p_adj_total", 
+                         "Coefficient_nonzero","CI_low_nonzero","CI_high_nonzero","p_nonzero","measure_p_adj_nonzero")],
+          file = paste0(supp_tab_data_outdir, "Supplementary_table_10_cx_data.csv"))
 ```
 
 Rearrange
@@ -1339,6 +1435,11 @@ xtable(lmrob_GI_annotations[,c("GI_columns_name","Coefficient","CI_low","CI_high
        , display = c("s","s","e","e","e","e","e"))
 ```
 
+```{r}
+write.csv(lmrob_GI_annotations[,c("GI_columns_name","Coefficient","CI_low","CI_high","p","measure_p_adj")],
+          file = paste0(supp_tab_data_outdir, "Supplementary_table_10_gi_data.csv"))
+```
+
 
 ## Colours
 ### CNAs
@@ -1405,16 +1506,16 @@ ha_row_annotation_top <- HeatmapAnnotation(Hypoxia = anno_barplot(hypoxia_signat
                                            "SNVs (log10)" = log(hypoxia_signatures_tum_data_single$num.SNVs.TCGA+1, base = 10),
                                            CNAs = hypoxia_signatures_tum_data_single$num_cnas,
                                            "Grade Group (GG)" = hypoxia_signatures_tum_data_single$ISUP,
-                                           PSA = hypoxia_signatures_tum_data_single$psa_bracket,
-                                           Age = hypoxia_signatures_tum_data_single$age_bracket,
+                                           "PSA (ng/ml)" = hypoxia_signatures_tum_data_single$psa_bracket,
+                                           "Age (Years)" = hypoxia_signatures_tum_data_single$age_bracket,
                                            "Purity ESTIMATE" = hypoxia_signatures_tum_data_single$tumour.purity.estimate,
                                            "ETS Status" = hypoxia_signatures_tum_data_single$ETS,
                                            col = list("FGA" = pga_colours,
                                                       "SNVs (log10)" = snv_colours,
                                                       CNAs = cna_colours,
                                                       "Grade Group (GG)" = isup_colours,
-                                                      PSA = psa_colours,
-                                                      Age = age_colours,
+                                                      "PSA (ng/ml)" = psa_colours,
+                                                      "Age (Years)" = age_colours,
                                                       "Purity ESTIMATE" = cellularity_colours,
                                                       "ETS Status" = erg_colours
                                            ))
@@ -1505,7 +1606,10 @@ driver_row_annotation_right <- rowAnnotation("Score Coef" = drivers_continuous_c
 
 ## Genomic Instability heatmap
 ```{r}
-gen_inst_heatmap_1 <- Heatmap(t(as.matrix(gi_mat["FGA",hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID])),
+gen_in_1_dat <- t(as.matrix(gi_mat["FGA",hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID, drop = FALSE]))
+colnames(gen_in_1_dat) <- "FGA"
+
+gen_inst_heatmap_1 <- Heatmap(t(gen_in_1_dat),
                               name = "FGA",
                               right_annotation = gi_row_annotation_right_1,
                               show_column_names = FALSE,
@@ -1615,6 +1719,194 @@ ht_list = driver_cn_heatmap %v% driver_mut_heatmap %v% drg_mut_heatmap %v% gen_i
 draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(20, 2, 24, 0, 2, 2), "mm"))
 ```
 
+```{r}
+pdf(file = paste0(fig_outdir_supp,"Supplementary_figure_8_",Sys.Date(),".pdf"), height = 20, width = 17)
+draw(ht_list, merge_legend = TRUE, ht_gap = unit(c(20, 2, 24, 0, 2, 2), "mm"))
+dev.off()
+```
+
+
+# Save heatmap data
+Top annotation
+```{r}
+# Hypoxia = anno_barplot(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within),
+#                                            "FGA" = hypoxia_signatures_tum_data_single$Fraction.Genome.Altered,
+#                                            "SNVs (log10)" = log(hypoxia_signatures_tum_data_single$num.SNVs.TCGA+1, base = 10),
+#                                            CNAs = hypoxia_signatures_tum_data_single$num_cnas,
+#                                            "Grade Group (GG)" = hypoxia_signatures_tum_data_single$ISUP,
+#                                            PSA = hypoxia_signatures_tum_data_single$psa_bracket,
+#                                            Age = hypoxia_signatures_tum_data_single$age_bracket,
+#                                            "Purity ESTIMATE" = hypoxia_signatures_tum_data_single$tumour.purity.estimate,
+#                                            "ETS Status" = hypoxia_signatures_tum_data_single$ETS
+tcga_top_anno <- hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                       "Buffa_signature_Sum_within_quartile_extended",
+                                                       "Fraction.Genome.Altered",
+                                                       "num.SNVs.TCGA",
+                                                       "num_cnas",
+                                                       "ISUP_Grade",
+                                                       "psa_bracket",
+                                                       "age_bracket",
+                                                       "tumour.purity.estimate",
+                                                       "ETS")]
+write.csv(tcga_top_anno, 
+          file = paste0(supp_fig_data_outdir,"Supplementary_figure_8_top_annotation.csv"))
+```
+
+Heatmap matrices
+```{r}
+# 1 driver cn
+write.csv(t(as.matrix(cna_mat_plot[hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID,])),
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_1_driver_cn_data.csv"))
+
+# 2 driver mut
+write.csv(t(as.matrix(driver_data[hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID,driver_top10_genes])),
+          file = paste0(supp_tab_data_outdir, "Supplementary_figure_8_2_driver_mut_data.csv"))
+
+# drg mut
+write.csv(total_drg_driver_mat,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_3_drg_driver_data.csv"))
+
+# GI1
+write.csv(t(as.matrix(gi_mat["FGA",hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID])),
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_4_gi_1_data.csv"))
+
+# GI2
+write.csv(gi_mat[!(rownames(gi_mat) == "FGA"),hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID],
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_5_gi_2_data.csv"))
+
+# sbs
+write.csv(sbs_sig_mat,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_6_sbs_data.csv"))
+
+# cx
+write.csv(cx_sig_mat,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_7_cs_data.csv"))
+```
+
+Right annotation
+```{r}
+# 1 driver cn
+# "Q1 v Q4" = cna_hypoxia_enrichment_quart_sub$Significance
+write.csv(cna_hypoxia_enrichment_quart_sub[,c("Significance", "fisher_p_val","fisher_p_adj"), drop = FALSE],
+          file = paste0(supp_fig_data_outdir,"Supplementary_figure_8_1_right_anno.csv"))
+```
+
+```{r}
+# 2 driver mut
+# "Score Coef" = drivers_continuous_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+#                                          "Score Signif" = drivers_continuous_coefficients[c(driver_top10_genes),]$Significance,
+#                                          "Quartile Coef" = drivers_quartile_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+#                                          "Quartile Signif" = drivers_quartile_coefficients[c(driver_top10_genes),]$Significance
+
+driver_mut_anno <- rbind("Score Coef" = drivers_continuous_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+                                         "Score Signif" = drivers_continuous_coefficients[c(driver_top10_genes),]$Significance,
+                         "Score adj pval" = drivers_continuous_coefficients[c(driver_top10_genes),]$Hypoxia_p_adj,
+                           "Score pval" = drivers_continuous_coefficients[c(driver_top10_genes),]$Hypoxia_p_value,
+                                         "Quartile Coef" = drivers_quartile_coefficients[c(driver_top10_genes),]$Hypoxia_coefficient,
+                                         "Quartile Signif" = drivers_quartile_coefficients[c(driver_top10_genes),]$Significance,
+                           "Quartile adj pval" = drivers_quartile_coefficients[c(driver_top10_genes),]$Hypoxia_p_adj,
+                           "Quartile pval" = drivers_quartile_coefficients[c(driver_top10_genes),]$Hypoxia_p_value)
+
+colnames(driver_mut_anno) <- driver_top10_genes
+
+write.csv(driver_mut_anno,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_2_right_anno.csv"))
+```
+
+```{r}
+# 3 drg mut
+# "Score Coef" = gene_sets_binom_coefficients$Score_coef,
+#                                          "Score Signif" = gene_sets_binom_coefficients$Score_Significance,
+#                                          "Quartile Coef" = gene_sets_binom_coefficients$Quart_coef,
+#                                          "Quartile Signif" = gene_sets_binom_coefficients$Quart_Significance
+
+drg_mut_anno <- rbind("Score Coef" = gene_sets_binom_coefficients$Score_coef,
+                                         "Score Signif" = gene_sets_binom_coefficients$Score_Significance,
+                      "Score pval" = gene_sets_binom_coefficients$Score_p,
+                                         "Quartile Coef" = gene_sets_binom_coefficients$Quart_coef,
+                                         "Quartile Signif" = gene_sets_binom_coefficients$Quart_Significance,
+                               "Quartile pval" = gene_sets_binom_coefficients$Quart_p)
+
+colnames(drg_mut_anno) <- rownames(gene_sets_binom_coefficients)
+
+write.csv(drg_mut_anno,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_3_right_anno.csv"))
+```
+
+```{r}
+# 4 GI1
+# "lmrob Signif" = lmrob_GI_annotations["FGA",]$Significance,
+#                                          "lmrob Coef" = lmrob_GI_annotations["FGA",]$Coefficient
+gi_1_anno <- rbind("lmrob Signif" = lmrob_GI_annotations["FGA",]$Significance,
+                                         "lmrob Coef" = lmrob_GI_annotations["FGA",]$Coefficient,
+                   "lmrob p" = lmrob_GI_annotations["FGA",]$p,
+                   "lmrob padj" = lmrob_GI_annotations["FGA",]$measure_p_adj)
+colnames(gi_1_anno) <- "FGA"
+
+write.csv(gi_1_anno, 
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_4_right_anno.csv"))
+
+```
+
+```{r}
+# 5 GI2
+# "lmrob Signif" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$Significance,
+#                                          "lmrob Coef" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$Coefficient
+gi_2_anno <- rbind("lmrob Signif" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$Significance,
+                                         "lmrob Coef" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$Coefficient,
+                   "lmrob p" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$p,
+                   "lmrob padj" = lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),]$measure_p_adj)
+
+colnames(gi_2_anno) <- rownames(lmrob_GI_annotations[!(rownames(lmrob_GI_annotations) == "FGA"),])
+
+write.csv(gi_2_anno, 
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_5_right_anno.csv"))
+```
+
+```{r}
+# 6 sbs
+# "lmrob Signif" = lmrob_SBS_annotations$Significance_total,
+#                                          "lmrob Coef" = lmrob_SBS_annotations$Coefficient_total,
+#                                          "N-Z lmrob Signif" = lmrob_SBS_annotations$Significance_nonzero,
+#                                          "N-Z lmrob Coef" = lmrob_SBS_annotations$Coefficient_nonzero
+sbs_anno <- rbind("lmrob Signif" = lmrob_SBS_annotations$Significance_total,
+                                         "lmrob Coef" = lmrob_SBS_annotations$Coefficient_total,
+                        "robustlmm p" = lmrob_SBS_annotations$p_total,
+                        "robustlmm padj" = lmrob_SBS_annotations$measure_p_adj,
+                                         "N-Z lmrob Signif" = lmrob_SBS_annotations$Significance_nonzero,
+                                         "N-Z lmrob Coef" = lmrob_SBS_annotations$Coefficient_nonzero,
+                        "N-Z robustlmm p" = lmrob_SBS_annotations$p_nonzero,
+                        "N-Z robustlmm padj" = lmrob_SBS_annotations$measure_p_adj_nonzero)
+
+colnames(sbs_anno) <- rownames(lmrob_SBS_annotations)
+
+write.csv(sbs_anno,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_6_right_anno.csv"))
+
+```
+
+```{r}
+# 7 cx
+# "lmrob Signif" = lmrob_CX_annotations$Significance_total,
+#                                          "lmrob Coef" = lmrob_CX_annotations$Coefficient_total,
+#                                          "N-Z lmrob Signif" = lmrob_CX_annotations$Significance_nonzero,
+#                                          "N-Z lmrob Coef" = lmrob_CX_annotations$Coefficient_nonzero
+
+cx_anno <- rbind("lmrob Signif" = lmrob_CX_annotations$Significance_total,
+                                         "lmrob Coef" = lmrob_CX_annotations$Coefficient_total,
+                       "robustlmm p" = lmrob_CX_annotations$p_total,
+                        "robustlmm padj" = lmrob_CX_annotations$measure_p_adj,
+                                         "N-Z lmrob Signif" = lmrob_CX_annotations$Significance_nonzero,
+                                         "N-Z lmrob Coef" = lmrob_CX_annotations$Coefficient_nonzero,
+                       "N-Z robustlmm p" = lmrob_CX_annotations$p_nonzero,
+                        "N-Z robustlmm padj" = lmrob_CX_annotations$measure_p_adj_nonzero)
+
+colnames(cx_anno) <- rownames(lmrob_CX_annotations)
+
+write.csv(cx_anno, 
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_8_7_right_anno.csv"))
+```
+
 # Supplementary figures
 ## GI boxplots
 ```{r}
@@ -1686,6 +1978,8 @@ grid.arrange(fga_plot_q+labs(tag = "A"),
              snv_plot_q+labs(tag = "B"),  cna_plot_q+labs(tag = "C"),
              nrow = 1, ncol = 3)
 ```
+
+
 ## GI scatter
 ```{r}
 snv_plot_s <- ggplot(hypoxia_signatures_tum_data_single, aes(x = Buffa_signature_Sum_within, y = num.SNVs.TCGA))+
@@ -1758,6 +2052,30 @@ grid.arrange(fga_plot_q+labs(tag = "A"),
                                    c(4,5,6)))
 ```
 
+```{r}
+png(filename = paste0(fig_outdir_supp, "Supplementary_figure_9_",Sys.Date(),".png"), height = 8, width = 14, res = 300, units = "in")
+grid.arrange(fga_plot_q+labs(tag = "A"), 
+             snv_plot_q, cna_plot_q,
+             fga_plot_s+labs(tag = "B"), 
+             snv_plot_s, cna_plot_s,
+             nrow = 2, ncol = 3,
+             layout_matrix = rbind(c(1,2,3),
+                                   c(4,5,6)))
+dev.off()
+```
+
+
+### Save underlying data
+```{r}
+write.csv(hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within",
+                                                "Buffa_signature_Sum_within_quartile_extended",
+                                                "num.SNVs.TCGA",
+                                                "num_cnas",
+                                                "Fraction.Genome.Altered")],
+          file = paste0(supp_fig_data_outdir,"Supplementary_figure_9_data.csv"))
+```
+
+
 ## SBS box and scatter plots
 ```{r}
 sbs_data_melt <- melt(as.data.table(hypoxia_signatures_tum_data_single), 
@@ -1807,6 +2125,20 @@ sbs_plot_s
 grid.arrange(sbs_plot_q+labs(tag = "A"),
              sbs_plot_s+labs(tag = "B"),
              nrow = 2, ncol = 1)
+```
+
+```{r}
+png(filename = paste0(fig_outdir_supp, "Supplementary_figure_10_",Sys.Date(),".png"), height = 18, width = 14, res = 300, units = "in")
+grid.arrange(sbs_plot_q+labs(tag = "A"),
+             sbs_plot_s+labs(tag = "B"),
+             nrow = 2, ncol = 1)
+dev.off()
+```
+
+### Save data
+```{r}
+write.csv(sbs_data_melt[,c("Buffa_signature_Sum_within", "Buffa_signature_Sum_within_quartile_extended","Signature","Number")],
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_10_data.csv"))
 ```
 
 
@@ -1859,6 +2191,21 @@ cx_plot_s
 grid.arrange(cx_plot_q+labs(tag = "A"),
              cx_plot_s+labs(tag = "B"),
              nrow = 2, ncol = 1)
+```
+
+```{r}
+png(filename = paste0(fig_outdir_supp, "Supplementary_figure_11_",Sys.Date(),".png"), height = 16, width = 14, res = 300, units = "in")
+grid.arrange(cx_plot_q+labs(tag = "A"),
+             cx_plot_s+labs(tag = "B"),
+             nrow = 2, ncol = 1)
+dev.off()
+```
+
+
+### Save data
+```{r}
+write.csv(cx_data_melt[,c("Buffa_signature_Sum_within", "Buffa_signature_Sum_within_quartile_extended","Signature","Number")],
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_11_data.csv"))
 ```
 
 # Session Info

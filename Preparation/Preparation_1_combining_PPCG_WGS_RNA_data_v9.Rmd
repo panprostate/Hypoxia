@@ -1,5 +1,5 @@
 ---
-title: "Creating PPCG combined table - V7"
+title: "Creating PPCG combined table - V9"
 author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
@@ -31,18 +31,18 @@ files = list(
     tracking_rna = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/MTS_new.csv',
     exclude_list = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Main_Tracking_Sheet_ICR_Exclusion_list_v1.0.tsv',
     greylist = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Main_Tracking_Sheet_ICR_greylist_v1.0.tsv',
-    pga = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/2024-04-09pcawgsummary_pgaSCNA_with_BD_SVs_03_05_2023_2024-04-09.txt',
+    pga = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/2026-04-05pcawgsummary_pgaSCNA_with_Brass_Delly_SVs_20260212_2026-04-05.txt',
     snvcounts = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/preliminary_ICGC_UK_RNAseq/PPCG_20April2021_SNV_number_2021-11-29.txt',
     indelcounts = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Somatic_variants/InDels/PPCG_indels_12_Dec_2023/Tiers/release_summary.tsv',
-    cnacounts = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/SCNA_with_BD_SVs_03_05_2023_2024-04-09.txt',
+    cnacounts = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/SCNA_with_Brass_Delly_SVs_20260212_num_cnas_2026-04-05.txt',
     svcounts = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/PPCG_SV_Data_ReleaseV2_04_October_2023_vcf_sv_number_2024-04-09.txt',
     kataegiscounts = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Data_Release/Somatic_variants/Kataegis/Kataegis_02_June_2021/PPCG_Kataegis_Calls_02_June_2021.tsv',
     mito_cn = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Mitochondria/PPCG_MT_Data_Release_2021_Oct_07/PPCG_MT_Data_Release_2021_Oct_07_copynumber.csv',
     hypoxia_signatures = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_analyses/manuscript_v2_outputs/hypoxia_scores/alternative_within_sample_scaled_hypoxia_scores_RNAv1.k10_2024-08-23.txt',
-    cellularity = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Somatic_variants/SCNA/SCNA_with_BD_SVs_03_05_2023/Cellularity_Ploidy_Estimates_03_May_2023.csv',
+    cellularity = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/2026_BB_update/cellularity_feb2026_2026-05-31.csv',
     ETS_status = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Main_Tracking_Sheet_ICR_ETS.csv',
-    subclone_number = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Subclones/Clone_count_14_08_2024.csv',
-    evo_qc = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Subclones/pp_evo_qc_pass.csv'
+    subclone_number = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/2026_BB_update/clone_count_2026-04-05.csv',
+    evo_qc = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Copy_Number/PPCG_Feb2026_NRPCC.txt'
     )
 ```
 
@@ -184,8 +184,8 @@ Date: Dec 2023-12-12
 
 ## CNA + PGA
 Data release:03_05_2023
-File: /mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/Somatic_variants/SCNA/SCNA_with_BD_SVs_03_05_2023/Subclonal_SCNA_with_Avg_CN/
-Date: May 2023-05-03
+File: /mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Copy_Number/SCNA_with_Brass_Delly_SVs_20260212
+Date: May 2026-04-05
 
 ## SV
 Data release: V2
@@ -228,9 +228,9 @@ str(kataegis_counts)
 ```
 
 ### Cellularity/purity
-Data release: SCNA_with_BD_SVs_03_05_2023
+Data release: Feb 2026
 
-Date: 03-05-2023 
+Date: Feb 2026
 
 ```{r}
 cellularity <- read.csv(files$cellularity, header = TRUE)
@@ -262,7 +262,7 @@ ets_status <- read.csv(files$ETS_status, header = TRUE)
 subclone_numbers <- read.csv(files$subclone_number, header = TRUE)
 ```
 ```{r}
-evo_qc <- read.csv(files$evo_qc, header = TRUE)
+evo_qc <- read.delim(files$evo_qc, header = TRUE, sep = "\t")
 ```
 
 
@@ -271,7 +271,7 @@ evo_qc <- read.csv(files$evo_qc, header = TRUE)
 ```{r}
 snv_counts$file_dna <- gsub("_vs_./*.*","",snv_counts$filename_snv)
 sv_counts$file_dna <- gsub("_ppcg_consensus_annotated.somatic.sv.vcf.gz","",sv_counts$filename_sv)
-cna_counts$file_dna <- gsub("_vs_./*.*","",cna_counts$filename_cnv)
+cna_counts$file_dna <- gsub("_vs_./*.*","",cna_counts$filename_cna)
 pga_values$file_dna <- gsub("_vs_./*.*","",pga_values$patient_id)
 ```
 
@@ -311,23 +311,30 @@ greylist_unique <- subset(greylist, WGS_AssayID %!in% exclude_list$WGS_AssayID)
 grey_exclude_list <- rbind(exclude_list, greylist_unique)
 ```
 
-## Remove copy number data for samples that don't pass QC
+## Remove subclone data for samples that don't pass NRPCC > 10
+Feb 2026 version of copy number data only has samples that passed
+```{r}
+evo_qc$PPCG_Sample_ID <- gsub("_vs_.*","", evo_qc$Barcode)
+evo_qc$pass_nrpcc_qc <- ifelse(evo_qc$NRPCC > 10, yes = TRUE, no = FALSE)
+```
+
 ```{r}
 
-cna_qc_pass <- evo_qc$PPCG_Sample_ID[evo_qc$pass_cna_qc %!in% greylist[grepl("Unsatisfactory",greylist$Reason_CV),"WGS_AssayID"]]
+# cna_qc_pass <- evo_qc$PPCG_Sample_ID[evo_qc$pass_cna_qc %!in% greylist[grepl("Unsatisfactory",greylist$Reason_CV),"WGS_AssayID"]]
 cna_qc_nrpcc_pass <- evo_qc$PPCG_Sample_ID[evo_qc$pass_nrpcc_qc == TRUE]
 ```
 
 ```{r}
-cna_signatures <- subset(cna_signatures, Samples_DNA %in% cna_qc_pass)
+# cna_signatures <- subset(cna_signatures, Samples_DNA %in% cna_qc_pass)
 ```
 
 ```{r}
-pga_values <- subset(pga_values, file_dna %in% cna_qc_pass)
+# pga_values <- subset(pga_values, file_dna %in% cna_qc_pass)
 ```
 
 ```{r}
-cna_counts <- subset(cna_counts, file_dna %in% cna_qc_pass)
+# 2026 version only contains files for samples with satisfacroty CNA calls
+# cna_counts <- subset(cna_counts, file_dna %in% cna_qc_pass)
 ```
 
 ```{r}
@@ -645,14 +652,14 @@ PPCG_data$Buffa_signature_Sum_within_quartile_extended[PPCG_data$Buffa_signature
 
 ```{r}
 write.table(PPCG_data, paste0("/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/",
-                              "combined_PPCG_WGS_RNA_summary_data_v7_",
+                              "combined_PPCG_WGS_RNA_summary_data_v9_",
                               Sys.Date(),
                               ".txt"),
             sep = "\t", row.names = FALSE)
 ```
 ```{r}
 saveRDS(PPCG_data, paste0("/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/",
-                              "combined_PPCG_WGS_RNA_summary_data_v7_",
+                              "combined_PPCG_WGS_RNA_summary_data_v9_",
                               Sys.Date(),
                               ".rds"))
 ```

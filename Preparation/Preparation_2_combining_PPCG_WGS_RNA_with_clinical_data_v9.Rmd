@@ -1,5 +1,5 @@
 ---
-title: "Creating PPCG combined table with clinical data - V7"
+title: "Creating PPCG combined table with clinical data - V9"
 author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
@@ -26,7 +26,7 @@ Read in data
 **Change these values on your system**
 ```{r}
 files = list(
-    combined_data = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/combined_PPCG_WGS_RNA_summary_data_v7_2024-12-05.txt',
+    combined_data = '/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_other/combined_PPCG_WGS_RNA_summary_data_v9_2026-05-31.txt',
     clinical_data = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGCoreDatav282024D_DATA_2024-12-02_1508.csv',
     path_review = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/PPCGPathReviewV10202_DATA_2024-09-27_1059.csv',
     outdir = '/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/'
@@ -34,7 +34,7 @@ files = list(
 ```
 
 ## Combined data
-Date: 2024-12-04
+Date: 2026-05-31
 
 Source: Maria Jakobsdottir
 ```{r}
@@ -185,14 +185,14 @@ dim(PPCG_data)
 
 ```{r}
 write.table(PPCG_data, paste0(files$outdir,
-                              "combined_PPCG_WGS_RNA_summary_data_clinical_v7_",
+                              "combined_PPCG_WGS_RNA_summary_data_clinical_v9_",
                               Sys.Date(),
                               ".txt"),
             sep = "\t", row.names = FALSE)
 ```
 ```{r}
 saveRDS(PPCG_data, paste0(files$outdir,
-                              "combined_PPCG_WGS_RNA_summary_data_clinical_v7_",
+                              "combined_PPCG_WGS_RNA_summary_data_clinical_v9_",
                               Sys.Date(),
                               ".rds"))
 ```

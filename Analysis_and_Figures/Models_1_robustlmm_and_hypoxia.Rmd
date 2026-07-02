@@ -35,8 +35,13 @@ Read in data
 
 ```{r}
 params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
-               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt")
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt")
 ```
+
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/"
+```
+
 
 ```{r}
 load(params$ppcg_colourlist)
@@ -48,7 +53,7 @@ print(params)
 ```
 
 ## Combined data
-Combined data from `../manuscript_dec_2024_code/Preparation_2_combining_PPCG_WGS_RNA_with_clinical_data_v7.Rmd` and `../manuscript_dec_2024_code/Preparation_1_combining_PPCG_WGS_RNA_data_v7.Rmd`. Check this file for version info. 
+Combined data from `../Preparation/Preparation_2_combining_PPCG_WGS_RNA_with_clinical_data_v9.Rmd` and `../Preparation/Preparation_1_combining_PPCG_WGS_RNA_data_v9.Rmd`. Check this file for version info. 
 
 ```{r}
 combined_data <- read.delim(params$combined_data, header = TRUE, sep = "\t")
@@ -61,9 +66,9 @@ cna_colnames <- c("CX1",  "CX2",  "CX3",  "CX4",  "CX5",  "CX7",  "CX8",  "CX11"
 cna_colnames_counts <- paste0(cna_colnames,"_numbers")
 ```
 
-### Multiply CNA signature proportions by number of CNAs
+### Multiply cna signature proportions by number of cnas
 ```{r}
-combined_data[,cna_colnames_counts] <- combined_data[,cna_colnames]*combined_data$num_cnvs
+combined_data[,cna_colnames_counts] <- combined_data[,cna_colnames]*combined_data$num.cnas
 ```
 
 # Merge data and select samples
@@ -129,7 +134,7 @@ lm_cnas_data <- subset(hypoxia_signatures_tum_data_single,
                                !is.na(age_at_tumour_collection) &
                                !is.na(ISUP_Grade) &
                                !is.na(Cellularity) &
-                               !is.na(num_cnvs))
+                               !is.na(num.cnas))
 ```
 
 ### SVs
@@ -268,7 +273,7 @@ tab_model(rlmer_indels)
 ## CNAs
 
 ```{r}
-rlmer_cnas <- rlmer(num_cnvs ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_cnas_data)
+rlmer_cnas <- rlmer(num.cnas ~ Buffa_signature_Sum_within + age_at_tumour_collection + ISUP_Grade + Cellularity + (1|Studies), data = lm_cnas_data)
 ```
 
 ```{r}
@@ -359,7 +364,7 @@ rlmer_GI_outputs$Model <- c("rlmer_pga_clonal", "rlmer_pga_subclonal", "rlmer_sn
                    "rlmer_cnas", "rlmer_svs", "rlmer_kataegis", "rlmer_mtcn")
 model_list <- list(rlmer_pga_clonal, rlmer_pga_subclonal, rlmer_snvs, rlmer_indels,
                    rlmer_cnas, rlmer_svs, rlmer_kataegis, rlmer_mtcn)
-rlmer_GI_outputs$Variable <- c("pga_clonal","pga_subclonal","num.SNVs_div100","Tier_1.counts_div100","num_cnvs","num.svs_div100","Kataegis_count","mtCN")
+rlmer_GI_outputs$Variable <- c("pga_clonal","pga_subclonal","num.SNVs_div100","Tier_1.counts_div100","num.cnas","num.svs_div100","Kataegis_count","mtCN")
 rlmer_GI_outputs$Measure <- c("Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
                               "Buffa_signature_Sum_within","Buffa_signature_Sum_within","Buffa_signature_Sum_within",
                               "Buffa_signature_Sum_within","Buffa_signature_Sum_within")
@@ -2412,14 +2417,14 @@ save(rlmer_GI_outputs,
      rlmer_SBS_outputs,
      rlmer_ID_outputs,
      rlmer_CX_outputs,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_coefficient_tables_k10_rearranged_20241204.RData")
+     file = paste0(outdir,"/robustlmm_outputs/total_coefficient_tables_k10_rearranged_",Sys.Date(), ".RData"))
 ```
 
 ```{r}
 save(rlmer_SBS_outputs_nonzero,
      rlmer_ID_outputs_nonzero,
      rlmer_CX_outputs_nonzero,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_20241204.RData")
+     file = paste0(outdir,"robustlmm_outputs/nonzero_coefficient_tables_k10_rearranged_", Sys.Date(), ".RData"))
 ```
 
 ## Saving models
@@ -2428,14 +2433,14 @@ save(model_list_GI,
      model_list_SBS,
      model_list_ID,
      model_list_CX,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/total_models_k10_rearranged_20241204.RData")
+     file = paste0(outdir, "/robustlmm_outputs/total_models_k10_rearranged_", Sys.Date(),".RData"))
 ```
 
 ```{r}
 save(model_list_nonzero_SBS,
      model_list_nonzero_ID,
      model_list_nonzero_CX,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_collaboration/manuscript_dec_2024_outputs/robustlmm_outputs/nonzero_models_k10_rearranged_20241204.RData")
+     file = paste0(outdir, "/robustlmm_outputs/nonzero_models_k10_rearranged_", Sys.Date(),".RData"))
 ```
 
 # Session info

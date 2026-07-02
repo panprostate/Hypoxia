@@ -1,0 +1,61 @@
+---
+title: "Summarising updated dpclust clones - 2026"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+# Libraries
+```{r}
+
+```
+
+# Data
+```{r}
+params <- list(dp_directory = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_SNV_clustering/",
+               outdir = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/2026_BB_update/")
+```
+
+```{r}
+dp_directories <- list.files(params$dp_directory, pattern = "_vs_")
+```
+
+```{r}
+dp_summary <- as.data.frame(dp_directories)
+```
+
+```{r}
+colnames(dp_summary) <- c("folder")
+```
+
+```{r}
+dp_summary$Clone_count_2026 <- NA
+```
+
+```{r}
+for(i in 1:length(dp_directories)){
+  dp_file <- list.files(paste0(params$dp_directory, "/", dp_summary$folder[i], "/"), pattern = "_bestClusterInfo.txt")
+  dp_data <- read.delim(paste0(params$dp_directory, "/", dp_summary$folder[i], "/", dp_file))
+  
+  dp_summary$Clone_count_2026[i] <- nrow(dp_data)
+}
+```
+
+```{r}
+dp_summary$PPCG_Sample_ID <- gsub("_vs_.*","",dp_summary$folder)
+```
+
+# Save output
+```{r}
+write.csv(dp_summary, 
+            file = paste0(params$outdir, "clone_count_",Sys.Date(),".csv"))
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```

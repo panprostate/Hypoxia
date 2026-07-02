@@ -21,6 +21,15 @@ options(bitmapType='cairo')
 '%!in%' <- function(x,y)!('%in%'(x,y))
 ```
 
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/"
+```
+
+```{r}
+supp_tab_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Table_Data/"
+```
+
+
 # Data
 Release 1.3 is just used for the metadata associated with it. The was not provided with the 1.4k10 release but will have been the same. 
 ```{r}
@@ -211,20 +220,25 @@ used_genes <- anti_join(used_genes, h_gene_sets_buffa)
 ```{r}
 # missing genes and used genes
 write.table(missing_genes,
-            file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/ssgsea_hallmark_gs_missing_from_1.4k10_",Sys.Date(),".txt"), 
+            file = paste0(outdir,"/ssgsea/ssgsea_hallmark_gs_missing_from_1.4k10_",Sys.Date(),".txt"), 
             sep = "\t", row.names = FALSE)
 write.table(used_genes,
-            file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt"), 
+            file = paste0(outdir,"/ssgsea/ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt"), 
             sep = "\t", row.names = FALSE)
 
 # summary table
 write.table(hallmark_gene_numbers,
-            file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/text_summary_ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt"), 
+            file = paste0(outdir,"/ssgsea/text_summary_ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt"), 
             sep = "\t", row.names = FALSE)
 # summary table as latex
-output_tex_file <- paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/latex_summary_ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt")
+output_tex_file <- paste0(outdir,"/ssgsea/latex_summary_ssgsea_hallmark_gs_used_from_1.4k10_",Sys.Date(),".txt")
 writeLines(text = latex_summary,
            con = output_tex_file)
+```
+
+```{r}
+write.csv(hallmark_gene_numbers,
+            file = paste0(supp_tab_data_outdir,"supp_tab_12_data",".csv"))
 ```
 
 
@@ -249,7 +263,7 @@ ssgseaResults$sample <- rownames(ssgseaResults)
 
 ```{r}
 write.table(ssgseaResults,
-            file = paste0("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/revised_ssgsea_hallmark_gs_",Sys.Date(),".txt"), 
+            file = paste0(outdir,"/ssgsea/revised_ssgsea_hallmark_gs_",Sys.Date(),".txt"), 
             sep = "\t", row.names = FALSE)
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: "Manuscript December 2024, Figure 4 - metastasis features. RNA data release 1.4k10prerelease"
+title: "Figure 4 - metastasis features. RNA data release 1.4k10prerelease"
 author: Maria Jakobsdottir (Maria.Jakobsdottir@manchester.ac.uk)
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
@@ -9,7 +9,7 @@ output:
     toc_depth: 6
 ---
 
-Analysis for figure 4 in Hypoxia manuscript December 2024.
+Analysis for figure 4 in Hypoxia manuscript.
 
 # Libraries used
 ```{r message=FALSE, warning=FALSE}
@@ -37,8 +37,7 @@ Read in data
 
 ```{r}
 params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
-               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
-               timing_trajectories = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data/Chris_trajectories/evolutionary_orderings_210824/PPCG_selected_primary_samples_sample_groups_G3.Rdata")
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt")
 ```
 
 ```{r}
@@ -48,6 +47,23 @@ load(params$ppcg_colourlist)
 Parameters, here for simplicity, otherwise kept in submission script. 
 ```{r}
 print(params)
+```
+
+## Outdirs
+```{r}
+fig_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Figures/"
+```
+
+```{r}
+fig_outdir_supp <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figures/"
+```
+
+```{r}
+fig_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Figure_Data/"
+```
+
+```{r}
+supp_fig_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figure_Data/"
 ```
 
 ## Combined data
@@ -166,6 +182,20 @@ paired_plot <- ggpaired(combined_data_paired_long_only_single, cond1 = "Buffa_si
 paired_plot
 ```
 
+```{r}
+supp_fig_7_data <- combined_data_paired_long_only_single[,c("Buffa_signature_Sum_within.TUM", "Buffa_signature_Sum_within.MET", "line_colour", "MetastaticSite.MET")]
+```
+
+```{r}
+ggpaired(supp_fig_7_data, cond1 = "Buffa_signature_Sum_within.TUM", cond2 = "Buffa_signature_Sum_within.MET", line.color = "line_colour", palette = "npg",
+         xlab = "Sample Type", ylab = "Hypoxia Score")+
+  scale_x_discrete(labels = c("Primary","Metastasis"))+
+  scale_colour_npg(name = "Line Colour:", labels = c("Higher in metastatic\n         sample", "Lower in metastastatic\n         sample"))+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Buffa_signature_Sum_within.TUM","Buffa_signature_Sum_within.MET")), test = "wilcox.test", tip_length = 0, y_position = 50)+
+  theme_light()+
+  theme(legend.text = element_text(size = 12), legend.position = "bottom")
+```
+
 
 ```{r}
 paired_plot_facet <- ggpaired(combined_data_paired_long_only_single, cond1 = "Buffa_signature_Sum_within.TUM", cond2 = "Buffa_signature_Sum_within.MET", facet.by =  "MetastaticSite.MET", line.color = "line_colour", palette = "npg",
@@ -177,29 +207,46 @@ paired_plot_facet <- ggpaired(combined_data_paired_long_only_single, cond1 = "Bu
 paired_plot_facet
 ```
 
+```{r}
+ggpaired(supp_fig_7_data, cond1 = "Buffa_signature_Sum_within.TUM", cond2 = "Buffa_signature_Sum_within.MET", facet.by =  "MetastaticSite.MET", line.color = "line_colour", palette = "npg",
+         xlab = "Sample Type", ylab = "Hypoxia Score")+
+  scale_x_discrete(labels = c("Primary","Metastasis"))+
+  theme_light()+
+  theme(legend.position = "none")+
+  geom_signif(map_signif_level = TRUE, comparisons = list(c("Buffa_signature_Sum_within.TUM","Buffa_signature_Sum_within.MET")), test = "wilcox.test", tip_length = 0, y_position = 50)
+```
+
+
 ```{r fig.height=8, fig.width=6}
 grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"), nrow = 2, ncol = 1)
+```
+
+```{r}
+write.csv(supp_fig_7_data, file = paste0(supp_fig_data_outdir,"Supplementary_Figure_7_data.csv"), row.names = FALSE)
 ```
 
 
 ```{r}
 wilcox.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
             combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
-            paired = TRUE
+            paired = TRUE,
+            conf.int = TRUE
             )
 ```
 
 ```{r}
 wilcox.test(subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Bone")$Buffa_signature_Sum_within.TUM,
             subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Bone")$Buffa_signature_Sum_within.MET,
-            paired = TRUE
+            paired = TRUE,
+            conf.int = TRUE
             )
 ```
 
 ```{r}
 wilcox.test(subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Lymph Node")$Buffa_signature_Sum_within.TUM,
             subset(combined_data_paired_long_only_single, MetastaticSite.MET == "Lymph Node")$Buffa_signature_Sum_within.MET,
-            paired = TRUE
+            paired = TRUE,
+            conf.int = TRUE
             )
 ```
 ```{r}
@@ -232,7 +279,7 @@ cor_pm_plot <- ggplot(combined_data_paired_long_only_single, aes(x = Buffa_signa
   theme_light()+
   xlab("Hypoxia Score - Primary Sample")+
   ylab("Hypoxia Score - Metastatic Sample")+
-  annotate("text", label = paste0("Spearman's ρ = ",
+  annotate("text", label = paste0("Spearman's rho = ",
                                  round(cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
             combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
             method = "spearman")[[4]], digits = 3),
@@ -245,6 +292,34 @@ cor_pm_plot <- ggplot(combined_data_paired_long_only_single, aes(x = Buffa_signa
 cor_pm_plot
 ```
 
+```{r}
+fig_4b_data <- combined_data_paired_long_only_single[,c("Buffa_signature_Sum_within.TUM", "Buffa_signature_Sum_within.MET", "MetastaticSite.MET"), drop = FALSE]
+```
+
+```{r}
+ggplot(fig_4b_data, aes(x = Buffa_signature_Sum_within.TUM, y = Buffa_signature_Sum_within.MET))+
+  geom_smooth(method = "lm", se = FALSE, colour = "grey30")+
+  geom_point(alpha = 0.8, aes(colour = MetastaticSite.MET))+
+  scale_colour_bmj(name = "Metastatic Site")+
+  # scale_shape_manual(name = "Multisample", values = c(17,19))+
+  theme_light()+
+  xlab("Hypoxia Score - Primary Sample")+
+  ylab("Hypoxia Score - Metastatic Sample")+
+  annotate("text", label = paste0("Spearman's ρ = ",
+                                 round(cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            method = "spearman")[[4]], digits = 3),
+                                 "; p = ",
+            format(cor.test(combined_data_paired_long_only_single$Buffa_signature_Sum_within.TUM, 
+            combined_data_paired_long_only_single$Buffa_signature_Sum_within.MET,
+            method = "spearman")[[3]], scientific = TRUE, digits = 3)), x = -15, y = 90, colour = "black")+
+  theme(legend.position = "bottom")+
+  guides(shape = guide_legend(nrow = 2), colour = guide_legend(nrow = 2))
+```
+
+```{r}
+write.csv(fig_4b_data, file = paste0(fig_data_outdir,"Figure_4b_data.csv"), row.names = FALSE)
+```
 
 
 ```{r fig.height=12, fig.width=6}
@@ -303,17 +378,20 @@ ggplot(combined_data_single, aes(x = met_status, y = Buffa_signature_Sum_within)
 
 ```{r}
 wilcox.test(subset(combined_data_single, met_status == "Primary without met")$Buffa_signature_Sum_within,
-            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within)
+            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within,
+            conf.int = TRUE)
 ```
 
 ```{r}
 wilcox.test(subset(combined_data_single, met_status == "Primary without met")$Buffa_signature_Sum_within,
-            subset(combined_data_single, met_status == "Metastasis")$Buffa_signature_Sum_within)
+            subset(combined_data_single, met_status == "Metastasis")$Buffa_signature_Sum_within,
+            conf.int = TRUE)
 ```
 
 ```{r}
 wilcox.test(subset(combined_data_single, met_status == "Metastasis")$Buffa_signature_Sum_within,
-            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within)
+            subset(combined_data_single, met_status == "Primary with met")$Buffa_signature_Sum_within,
+            conf.int = TRUE)
 ```
 
 ```{r}
@@ -421,8 +499,8 @@ combined_data_single_all_sub_hypoxia <- subset(combined_data_single_all_sub, !is
 ```
 
 ```{r}
-wilcox_met_status_stats <- as.data.frame(matrix(nrow = 6, ncol = 6))
-colnames(wilcox_met_status_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted")
+wilcox_met_status_stats <- as.data.frame(matrix(nrow = 6, ncol = 9))
+colnames(wilcox_met_status_stats) <- c("Status_1","Status_2","n_Status_1","n_Status_2","wilcox_p","wilcox_p_adjusted", "wilcox_w", "wilcox_L95", "wilcox_U95")
 wilcox_met_status_stats$Status_1 <- c(rep("Benign",3),rep("No Metastatic\n Biology",2),"Metastatic\n Biology")
 wilcox_met_status_stats$Status_2 <- c("No Metastatic\n Biology","Metastatic\n Biology","Metastasis",
                                       "Metastatic\n Biology","Metastasis","Metastasis")
@@ -435,7 +513,25 @@ for(i in 1:nrow(wilcox_met_status_stats)){
   wilcox_met_status_stats$wilcox_p[i] <- wilcox.test(subset(combined_data_single_all_sub_hypoxia, 
                                                             met_category == wilcox_met_status_stats$Status_1[i])$Buffa_signature_Sum_within,
                                                      subset(combined_data_single_all_sub_hypoxia, 
-                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within)[[3]]
+                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within, 
+                                                     conf.int = TRUE)[[3]]
+  
+  wilcox_met_status_stats$wilcox_w[i] <- wilcox.test(subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within, 
+                                                     conf.int = TRUE)[[1]]
+  wilcox_met_status_stats$wilcox_L95[i] <- wilcox.test(subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within, 
+                                                     conf.int = TRUE)[[8]][1]
+  wilcox_met_status_stats$wilcox_U95[i] <- wilcox.test(subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_1[i])$Buffa_signature_Sum_within,
+                                                     subset(combined_data_single_all_sub_hypoxia, 
+                                                            met_category == wilcox_met_status_stats$Status_2[i])$Buffa_signature_Sum_within, 
+                                                     conf.int = TRUE)[[8]][2]
+  
 }
 
 wilcox_met_status_stats$wilcox_p_adjusted <- p.adjust(wilcox_met_status_stats$wilcox_p, method = "BH")
@@ -474,6 +570,39 @@ new_met_status_plot <- ggplot(combined_data_single_all_sub_met, aes(x = met_cate
 new_met_status_plot
 ```
 
+```{r}
+fig_4a_data <- combined_data_single_all_sub_met[,c("met_category","Buffa_signature_Sum_within")]
+```
+
+```{r}
+ggplot(fig_4a_data, aes(x = met_category, y = Buffa_signature_Sum_within))+
+  geom_boxplot(outlier.colour = NA)+ # Because we show individual data points
+  geom_jitter(alpha = 0.5, aes(colour = met_category), height = 0)+
+  theme_light()+
+  xlab("Sample and Patient Status")+
+  ylab("Hypoxia Score")+
+  scale_colour_manual(values = c("Benign" = "skyblue",
+                                 "No Metastatic\n Biology" = PPCG_colourlist$new_metastatic_biology_indicator_colourlist$no_mets_biology,
+                                 "Metastatic\n Biology" = "#698B22",
+                                 "Metastasis" = "forestgreen"))+
+  theme(legend.position = "none")+
+  geom_signif(map_signif_level = TRUE, test = "wilcox.test", tip_length = 0,
+              comparisons = list(c("Benign","No Metastatic\n Biology"),
+                                 c("Benign","Metastatic\n Biology"),
+                                 c("Benign","Metastasis"),
+                                 c("No Metastatic\n Biology","Metastatic\n Biology"),
+                                 c("No Metastatic\n Biology","Metastasis"),
+                                 c("Metastatic\n Biology","Metastasis")), 
+              y_position = c(28,43,48,
+                             33,38,28))+
+  coord_cartesian(ylim = c(-35,55))
+```
+
+```{r}
+write.csv(fig_4a_data, paste0(fig_data_outdir,"Figure_4a_data.csv"), row.names = FALSE)
+```
+
+
 # Combine figures for main and supplementary
 ## Main figure
 
@@ -483,12 +612,27 @@ grid.arrange(new_met_status_plot+labs(tag = "A"),
              nrow = 2)
 ```
 
+```{r}
+pdf(file = paste0(fig_outdir,"/","Figure_4_",Sys.Date(),".pdf"), width = 8.5, height = 10)
+grid.arrange(new_met_status_plot+labs(tag = "A"),
+             cor_pm_plot+labs(tag = "B"),
+             nrow = 2)
+dev.off()
+```
+
 ## Supp figure
 ```{r fig.height=8, fig.width=6}
 grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"),
              nrow = 2, ncol = 1)
 ```
 
+```{r}
+png(filename = paste0(fig_outdir_supp,"/","supplementary_figure_7_paired_scores_",Sys.Date(),".png"), width = 6, height = 8, 
+    units = "in", res = 300)
+grid.arrange(paired_plot+labs(tag = "A"), paired_plot_facet +labs(tag = "B"),
+             nrow = 2, ncol = 1)
+dev.off()
+```
 
 # Session info
 ```{r}

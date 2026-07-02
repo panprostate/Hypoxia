@@ -1,0 +1,67 @@
+---
+title: "Summarising updated cellularity - 2026"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    toc: true 
+    toc_float: true
+    toc_depth: 6
+---
+
+# Libraries
+```{r}
+
+```
+
+# Data
+```{r}
+params <- list(cel_directory = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_Copy_Number/SCNA_with_Brass_Delly_SVs_20260212/purity_ploidy/",
+               outdir = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/2026_BB_update/")
+```
+
+```{r}
+cel_files <- list.files(params$cel_directory, pattern = ".txt")
+```
+
+```{r}
+cel_summary <- as.data.frame(cel_files)
+```
+
+```{r}
+colnames(cel_summary) <- c("file")
+```
+
+```{r}
+cel_summary$Cellularity <- NA
+```
+
+```{r}
+for(i in 1:length(cel_files)){
+  cel_file <- paste0(params$cel_directory, "/", cel_summary$file[i])
+  
+  cel_data <- read.delim(cel_file)
+  
+  if(!is.null(cel_data$cellularity)){
+    cel_summary$Cellularity[i] <- cel_data$cellularity
+  }else if(!is.null(cel_data$purity)){
+    cel_summary$Cellularity[i] <- cel_data$purity
+  }
+  
+}
+```
+
+```{r}
+cel_summary$PPCG_Sample_ID <- gsub("_vs_.*","",cel_summary$file)
+```
+
+# Save output
+```{r}
+write.csv(cel_summary, 
+            file = paste0(params$outdir, "cellularity_feb2026_",Sys.Date(),".csv"))
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```

@@ -32,6 +32,10 @@ options(bitmapType='cairo')
 '%!in%' <- function(x,y)!('%in%'(x,y))
 ```
 
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/"
+```
+
 # Functions
 ```{r}
 my_point_plot <- function(object){ggplot()+geom_point(aes(x = object$fitted.values, y = object$residuals, colour = object$rweights))+geom_hline(yintercept = 0)}
@@ -45,7 +49,7 @@ Read in data
 
 ```{r}
 params <- list(ppcg_colourlist = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData",
-               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt",
+               combined_data = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt",
                TCGA_FGA = "/mnt/bmh01-rds/UoOxford_David_W/shared/TCGA-PRAD/TCGA_PRAD_cBioPortal_Fraction_Genome_Altered.txt",
                TCGA_CX = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/CINSignature_Activities_THRESH95_TCGA-PRAD-WGS_Jun2026.tsv",
                TCGA_SBS = "/mnt/bmh01-rds/UoOxford_David_W/shared/PPCG_TCGA/TCGA/PPCG_SBS96_assigned_to_TCGA_samples/Assignment_Solution/Activities/Assignment_Solution_Activities.txt",
@@ -2044,13 +2048,13 @@ model_list_nonzero_CX <- model_list_nonzero
 save(lmrob_GI_outputs,
      lmrob_SBS_outputs,
      lmrob_CX_outputs,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/total_coefficient_tables_k10_rearranged_20251018.RData")
+     file = paste0(outdir,"/TCGA_analysis/lmrob_outputs/total_coefficient_tables_k10_rearranged_",Sys.Date(),".RData"))
 ```
 
 ```{r}
 save(lmrob_SBS_outputs_nonzero,
      lmrob_CX_outputs_nonzero,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/nonzero_coefficient_tables_k10_rearranged_20251018.RData")
+     file = paste0(outdir,"/TCGA_analysis/lmrob_outputs/nonzero_coefficient_tables_k10_rearranged_", Sys.Date(), ".RData"))
 ```
 
 ## Saving models
@@ -2058,13 +2062,13 @@ save(lmrob_SBS_outputs_nonzero,
 save(model_list_GI,
      model_list_SBS,
      model_list_CX,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/total_models_k10_rearranged_20251018.RData")
+     file = paste0(outdir,"/TCGA_analysis/lmrob_outputs/total_models_k10_rearranged_", Sys.Date(), ".RData"))
 ```
 
 ```{r}
 save(model_list_nonzero_SBS,
      model_list_nonzero_CX,
-     file = "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/TCGA_analysis/lmrob_outputs/nonzero_models_k10_rearranged_20251018.RData")
+     file = paste0(outdir,"/TCGA_analysis/lmrob_outputs/nonzero_models_k10_rearranged_", Sys.Date(), ".RData"))
 ```
 
 # Session info

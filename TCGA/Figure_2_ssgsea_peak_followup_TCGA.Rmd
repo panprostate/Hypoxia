@@ -28,10 +28,27 @@ library(viridis)
 load("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/GitHub/PPCG_colours/PPCG_colourlist.RData")
 ```
 
+
+```{r}
+outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/"
+```
+
+```{r}
+fig_outdir_supp <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figures/"
+```
+
+```{r}
+supp_fig_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Figure_Data/"
+```
+
+```{r}
+supp_tab_data_outdir <- "/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/Supplementary_Table_Data/"
+```
+
 ## Combined data
 
 ```{r}
-combined_data <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v7_2024-12-06.txt", header = TRUE, sep = "\t")
+combined_data <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_data_private/combined_PPCG_WGS_RNA_summary_data_clinical_v9_2026-05-31.txt", header = TRUE, sep = "\t")
 ```
 
 ```{r}
@@ -59,7 +76,7 @@ hypoxia_signatures_tum_data_single <- subset(hypoxia_signatures_tum_data_single,
 ```
 
 ```{r}
-length(unique(hypoxia_signatures_tum_data_single$PPCG_Donor_ID))
+length(unique(hypoxia_signatures_tum_data_single$RNA_Local_Assay_ID))
 ```
 
 ```{r}
@@ -88,7 +105,7 @@ hypoxia_signatures_tum_data_single$age_bracket <- factor(hypoxia_signatures_tum_
 ## ssGSEA
 
 ```{r}
-ssgsea_hallmark <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_revisions/outputs/ssgsea/revised_ssgsea_hallmark_gs_2025-06-17.txt")
+ssgsea_hallmark <- read.delim("/mnt/bmh01-rds/UoOxford_David_W/b05055gj/PPCG_hypoxia_paper_final_results/outputs/ssgsea/revised_ssgsea_hallmark_gs_2026-05-31.txt")
 ```
 
 ```{r}
@@ -408,6 +425,10 @@ ssgsea_hallmark_hypoxia <- merge(ssgsea_hallmark_hypoxia,
 as.data.frame(ssgsea_hallmark_hypoxia)
 ```
 
+```{r}
+rownames(ssgsea_hallmark_hypoxia) <- ssgsea_hallmark_hypoxia$RNA_Local_Assay_ID
+```
+
 
 ```{r}
 dim(ssgsea_hallmark_hypoxia)
@@ -416,9 +437,9 @@ dim(ssgsea_hallmark_hypoxia)
 # Plots and analysis
 ## Difference between groups
 ```{r}
-ssgsea_wilcox_table <- as.data.frame(matrix(nrow = length(colnames(ssgsea_hallmark)[-51]), ncol = 4))
+ssgsea_wilcox_table <- as.data.frame(matrix(nrow = length(colnames(ssgsea_hallmark)[-51]), ncol = 7))
 colnames(ssgsea_wilcox_table) <- c("Hallmark_pathway",
-                                   "Direction_q1_q4","p_value_q1_q4","p_adj_q1_q4")
+                                   "Direction_q1_q4","p_value_q1_q4","p_adj_q1_q4", "wilcox_w", "wilcox_L95", "wilcox_U95")
 ssgsea_wilcox_table$Hallmark_pathway <- colnames(ssgsea_hallmark)[-51]
 ```
 
@@ -428,7 +449,18 @@ for(i in 1:nrow(ssgsea_wilcox_table)){
   set <- ssgsea_wilcox_table$Hallmark_pathway[i]
   
   ssgsea_wilcox_table$p_value_q1_q4[i] <- wilcox.test(subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q4")[,set],
-                                                         subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set])[[3]]
+                                                         subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set],
+                                                      conf.int = TRUE)[[3]]
+  
+  ssgsea_wilcox_table$wilcox_w[i] <- wilcox.test(subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q4")[,set],
+                                                         subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set],
+                                                      conf.int = TRUE)[[1]]
+  ssgsea_wilcox_table$wilcox_L95[i] <- wilcox.test(subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q4")[,set],
+                                                         subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set],
+                                                      conf.int = TRUE)[[8]][1]
+  ssgsea_wilcox_table$wilcox_U95[i] <- wilcox.test(subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q4")[,set],
+                                                         subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set],
+                                                      conf.int = TRUE)[[8]][2]
   
   ssgsea_wilcox_table$Direction_q1_q4[i] <- ifelse(median(subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q4")[,set]) > median( subset(ssgsea_hallmark_hypoxia, Buffa_signature_Sum_within_quartile_extended == "Q1")[,set]), yes = "Higher in Q4", no = "Higher in Q1")
   
@@ -449,11 +481,11 @@ ssgsea_wilcox_table$significance_q1_q4 <- ifelse(ssgsea_wilcox_table$p_adj_q1_q4
 ## Heatmap data
 ```{r}
 heatmap_mat <- as.matrix(t(scale(ssgsea_hallmark_hypoxia[,colnames(ssgsea_hallmark)[-51]])))
-colnames(heatmap_mat) <- ssgsea_hallmark_hypoxia$PPCG_Donor_ID
+colnames(heatmap_mat) <- ssgsea_hallmark_hypoxia$RNA_Local_Assay_ID
 # order data by hypoxia scores
 ssgsea_hallmark_hypoxia <- ssgsea_hallmark_hypoxia[order(ssgsea_hallmark_hypoxia$Buffa_signature_Sum_within, decreasing = FALSE),]
 # order driver samples by hypoxia scores
-heatmap_mat <- heatmap_mat[,ssgsea_hallmark_hypoxia$PPCG_Donor_ID]
+heatmap_mat <- heatmap_mat[,ssgsea_hallmark_hypoxia$RNA_Local_Assay_ID]
 ```
 
 ```{r}
@@ -1092,14 +1124,14 @@ ha_row_annotation_right <- rowAnnotation(Q1vQ4 = ssgsea_wilcox_table$significanc
 ha_annotation_bottom <- HeatmapAnnotation(Gleason = ssgsea_hallmark_hypoxia$gleason_total,
                                               ClinicalT = ssgsea_hallmark_hypoxia$clin_t_bracket,
                                               ISUP = ssgsea_hallmark_hypoxia$ISUP,
-                                              PSA = ssgsea_hallmark_hypoxia$psa_bracket,
-                                              Age = ssgsea_hallmark_hypoxia$age_bracket,
+                                              "PSA (ng/ml)" = ssgsea_hallmark_hypoxia$psa_bracket,
+                                              "Age (Years)" = ssgsea_hallmark_hypoxia$age_bracket,
                                               Purity = ssgsea_hallmark_hypoxia$tumour.purity.estimate,
                                               col = list(Gleason = gleason_colours,
                                                          ClinicalT = clin_t_colours,
                                                          ISUP = isup_colours,
-                                                         PSA = psa_colours,
-                                                         Age = age_colours,
+                                                         "PSA (ng/ml)" = psa_colours,
+                                                         "Age (Years)" = age_colours,
                                                          Purity = cellularity_colours))
 ```
 
@@ -1130,6 +1162,60 @@ ssgsea_heatmap_grob = grid.grabExpr(draw(ssgsea_heatmap#,
 )) 
 ```
 
+```{r}
+pdf(file = paste0(fig_outdir_supp,"Supplementary_figure_12_heatmap_", Sys.Date(), ".pdf"), 
+    width = 18, height = 13.5)
+draw(ssgsea_heatmap)
+dev.off()
+```
+
+
+## Save heatmap data
+Top data
+```{r}
+# Hypoxia = anno_barplot(ssgsea_hallmark_hypoxia$Buffa_signature_Sum_within),
+#                                            Gleason = ssgsea_hallmark_hypoxia$gleason_total,
+#                                            "Clinical T" = ssgsea_hallmark_hypoxia$clin_t_bracket,
+#                                            "Gleason Grade Group (GG)" = ssgsea_hallmark_hypoxia$ISUP,
+#                                            PSA = ssgsea_hallmark_hypoxia$psa_bracket,
+#                                            Age = ssgsea_hallmark_hypoxia$age_bracket,
+#                                            Purity = ssgsea_hallmark_hypoxia$tumour.purity.estimate,
+#                                            "ETS Status" = ssgsea_hallmark_hypoxia$ETS
+
+write.csv(ssgsea_hallmark_hypoxia[,c("Buffa_signature_Sum_within",
+                                     "Buffa_signature_Sum_within_quartile_extended",
+                                     "gleason_total",
+                                     "clin_t_bracket",
+                                     "ISUP_Grade",
+                                     "psa_bracket",
+                                     "age_bracket",
+                                     "tumour.purity.estimate",
+                                     "ETS")],
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_12_top_anno.csv"))
+```
+
+
+Matrix
+```{r}
+write.csv(heatmap_mat,
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_12_heatmap_data.csv"))
+```
+
+Right annotation
+```{r}
+# Q1vQ4 = ssgsea_wilcox_table$significance_q1_q4,
+#                                          robustlm = lmrob_hallmark_outputs$significance,
+#                                          Coefficient = lmrob_hallmark_outputs$Coefficient
+ssgsea_right_anno <- rbind("Q1vQ4" = ssgsea_wilcox_table$significance_q1_q4,
+                                         "robustlm" = lmrob_hallmark_outputs$significance,
+                                         "Coefficient" = lmrob_hallmark_outputs$Coefficient,
+                           "robustlmm p" = lmrob_hallmark_outputs$p ,
+                           "robustlmm padj" = lmrob_hallmark_outputs$measure_p_adj)
+colnames(ssgsea_right_anno) <- lmrob_hallmark_outputs$Measure
+
+write.csv(ssgsea_right_anno, 
+          file = paste0(supp_fig_data_outdir, "Supplementary_figure_12_right_anno.csv"))
+```
 
 # Peak score plots
 ```{r}
@@ -1150,7 +1236,7 @@ cor.test(ssgsea_hallmark_hypoxia$Peak2_average, ssgsea_hallmark_hypoxia$Buffa_si
 
 ```{r}
 peak1_peak2_scatter <- ggplot(ssgsea_hallmark_hypoxia, aes(x = Peak1_average, y = Peak2_average, colour = Buffa_signature_Sum_within))+
-  geom_point()+
+  geom_point(alpha = 0.5)+
   theme_light()+
   scale_colour_gradient2(low = "#14556e",  mid = "white",  high = "#9c2f15",  midpoint = 0, name = "Hypoxia Score")+
   xlab("Peak1 Score")+
@@ -1171,7 +1257,7 @@ hypoxia_peak1_scatter
 
 ```{r}
 hypoxia_peak2_scatter <- ggplot(ssgsea_hallmark_hypoxia, aes(x = Peak2_average, y = Buffa_signature_Sum_within))+
-  geom_point()+
+  geom_point(alpha = 0.5)+
   theme_light()+
   xlab("Peak2 Score")+
   ylab("Hypoxia Score")+
@@ -1240,228 +1326,29 @@ grid.arrange(ggplot()+labs(tag="A"),
                                    c(2,3)))
 ```
 
-
-# DDR heatmap
 ```{r}
-drg128_gene_list <- structure(list(SYMBOL = c("AKT1","ALKBH3","APEX1","APLF","ATM",
-                   "ATR","ATRIP","BAP1","BARD1","BLM",
-                   "BRCA1","BRCA2","BRIP1","CCNH","CDC25A",
-                   "CDC25C","CDH1","CDK1","CDK2","CDK4",
-                   "CDKN2A","CHEK1","CHEK2","CLK2","DCLRE1A",
-                   "DDB1","EME1","EME2","EPCAM","ERCC2",
-                   "ERCC3","ERCC5","ERCC6","ESR2","EXO1",
-                   "ABRAXAS1","FANCA","FANCD2","FANCI","FANCL",#FAM175A changed to ABRAXAS1
-                   "FANCM","GADD45A","GEN1","GTF2H2","GTF2H3",
-                   "GTF2H4","H2AX","HUS1","LIG1","LIG3",# H2AFX changed to H2AX
-                   "LIG4","MLH1","MLH3","MMS19","MNAT1",
-                   "MPG","MRE11","MRE11A","MSH2","MSH3",
-                   "MSH5","MSH6","MSR1","NABP2","NBN",
-                   "NEIL1","NEIL2","NHEJ1","NTHL1","OGG1",
-                   "PALB2","PARP2","PER1","PER2","PMS1",
-                   "PMS2","PNKP","POLD1","POLE","POLH",
-                   "POLK","POLL","POLM","POLN","POLQ",
-                   "POT1","PRSS1","PTCH1","PTEN","RAD1",
-                   "RAD50","RAD51","RAD51B","RAD51C","RAD51D",
-                   "RAD52","RAD54B","RAD54L","RB1","RDM1",
-                   "RECQL","RECQL4","RECQL5","RINT1","RNF8",
-                   "RPA1","RPA3","SETMAR","SLX4","SMAD4",
-                   "SMARCA4","SMUG1","STK11","TDG","TDP1",
-                   "TOP2A","TOP2B","TOP3A","TP53","TP53BP1",
-                   "WRN","XAB2","XPA","XPC","XRCC1",
-                   "XRCC2","XRCC4","XRCC5"),#
-                    ENSG = c("ENSG00000142208", "ENSG00000166199", "ENSG00000100823", "ENSG00000169621", "ENSG00000149311", 
-                              "ENSG00000175054", "ENSG00000164053", "ENSG00000163930", "ENSG00000138376", "ENSG00000197299",
-                              "ENSG00000012048", "ENSG00000139618", "ENSG00000136492", "ENSG00000134480", "ENSG00000164045", 
-                              "ENSG00000158402", "ENSG00000039068", "ENSG00000170312", "ENSG00000123374", "ENSG00000135446",
-                              "ENSG00000147889", "ENSG00000149554", "ENSG00000183765", "ENSG00000176444", "ENSG00000198924",
-                              "ENSG00000167986", "ENSG00000154920", "ENSG00000197774", "ENSG00000119888", "ENSG00000104884", 
-                              "ENSG00000163161", "ENSG00000134899", "ENSG00000225830", "ENSG00000140009", "ENSG00000174371",
-                              "ENSG00000163322", "ENSG00000187741", "ENSG00000144554", "ENSG00000140525", "ENSG00000115392", 
-                              "ENSG00000187790", "ENSG00000116717", "ENSG00000178295", "ENSG00000145736", "ENSG00000111358",
-                              "ENSG00000213780", "ENSG00000188486", "ENSG00000136273", "ENSG00000105486", "ENSG00000005156",
-                              "ENSG00000174405", "ENSG00000076242", "ENSG00000119684", "ENSG00000155229", "ENSG00000020426",
-                              "ENSG00000103152", "ENSG00000020922", "ENSG00000020922", "ENSG00000095002", "ENSG00000113318",
-                              "ENSG00000204410", "ENSG00000116062", "ENSG00000038945", "ENSG00000139579", "ENSG00000104320",
-                              "ENSG00000140398", "ENSG00000154328", "ENSG00000187736", "ENSG00000065057", "ENSG00000114026", 
-                              "ENSG00000083093", "ENSG00000129484", "ENSG00000179094", "ENSG00000132326", "ENSG00000064933",
-                              "ENSG00000122512", "ENSG00000039650", "ENSG00000062822", "ENSG00000177084", "ENSG00000170734",
-                              "ENSG00000122008", "ENSG00000166169", "ENSG00000122678", "ENSG00000130997", "ENSG00000051341",
-                              "ENSG00000128513", "ENSG00000204983", "ENSG00000185920", "ENSG00000171862", "ENSG00000113456",
-                              "ENSG00000113522", "ENSG00000051180", "ENSG00000182185", "ENSG00000108384", "ENSG00000185379",
-                              "ENSG00000002016", "ENSG00000197275", "ENSG00000085999", "ENSG00000139687", "ENSG00000278023",
-                              "ENSG00000004700", "ENSG00000160957", "ENSG00000108469", "ENSG00000135249", "ENSG00000112130",
-                              "ENSG00000132383", "ENSG00000106399", "ENSG00000170364", "ENSG00000188827", "ENSG00000141646",
-                              "ENSG00000127616", "ENSG00000123415", "ENSG00000118046", "ENSG00000139372", "ENSG00000042088",
-                              "ENSG00000131747", "ENSG00000077097", "ENSG00000177302", "ENSG00000141510", "ENSG00000067369",
-                              "ENSG00000165392", "ENSG00000076924", "ENSG00000136936", "ENSG00000154767", "ENSG00000073050",
-                              "ENSG00000196584", "ENSG00000152422", "ENSG00000079246"),
-                    DRG_group = c("DRG128","DRG128","DRG128","DRG128","DRG36",
-                                  "DRG128","DRG128","DRG36","DRG128","DRG36",
-                                  "DRG36","DRG36","DRG36","DRG128","DRG128",
-                                  "DRG128","DRG36","DRG128","DRG128","DRG36",
-                                  "DRG36","DRG128","DRG36","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG36","DRG36","DRG36","DRG36",
-                                  "DRG36","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG36","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG36","DRG128",
-                                  "DRG128","DRG36","DRG128","DRG128","DRG36",
-                                  "DRG128","DRG128","DRG128","DRG36","DRG128",
-                                  "DRG36","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG36","DRG128","DRG36","DRG36","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG36","DRG128","DRG36","DRG36","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG36","DRG36",
-                                  "DRG128","DRG128","DRG128","DRG36","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG128","DRG36",
-                                  "DRG36","DRG128","DRG36","DRG128","DRG128",
-                                  "DRG128","DRG128","DRG128","DRG36","DRG128",
-                                  "DRG128","DRG128","DRG36","DRG36","DRG128",
-                                  "DRG128","DRG128","DRG128"),
-                      DDR_pathway = c("Other", "DR", "BER", "BER", "Other", 
-                                      "Other", "Other", "Other", "HR", "HR",
-                                      "HR", "HR", "HR", "NER", "Other",
-                                      "Other", "Other", "Other", "Other", "Other",
-                                      "Other", "Other", "Other", "Other", "Other",
-                                      "NER", "HR", "HR", "Other", "NER",
-                                      "NER", "NER", "NER", "Other", "MMR", 
-                                      "Other", "FA", "FA", "FA", "FA", 
-                                      "FA", "Other", "HR", "NER", "NER",
-                                      "NER", "Other", "Other", "Many", "BER",
-                                      "NHEJ", "MMR", "MMR", "NER", "NER", 
-                                      "BER", "Other", "HR", "MMR", "MMR", 
-                                      "MMR", "MMR", "Other", "Other", "HR",
-                                      "BER", "BER", "NHEJ", "BER", "BER",
-                                      "HR", "HR", "Other", "Other", "MMR", 
-                                      "MMR", "BER", "Many", "NER", "Many", 
-                                      "Many", "NHEJ", "NHEJ", "TLS", "TLS",
-                                      "Other", "Other", "Other", "Other", "Other",
-                                      "HR", "HR", "HR", "HR", "HR",
-                                      "HR", "HR", "HR", "Other", "HR",
-                                      "HR", "HR", "HR", "Other", "NHEJ",
-                                      "Many", "Many", "Other", "Other", "Other", 
-                                      "Other", "BER", "Other", "BER", "BER", 
-                                      "Other", "Other", "HR", "Other", "HR",
-                                      "BER", "NER", "NER", "NER", "BER",
-                                      "HR", "NHEJ", "NHEJ")),
-                             class = "data.frame", 
-                             row.names = c(NA,-128L))
+png(filename = paste0(fig_outdir_supp, "Supplementary_figure_12_peak_plots_base_",Sys.Date(),".png"), 
+    width = 18, height = 18, units = "cm", res = 300)
+grid.arrange(ggplot()+labs(tag="A"),
+             hypoxia_peak1_scatter+labs(tag = "B"), hypoxia_peak2_scatter+labs(tag="C"),
+             ncol = 2, nrow = 4,
+             layout_matrix = rbind(c(1,1),
+                                   c(1,1),
+                                   c(1,1),
+                                   c(2,3)))
+dev.off()
 ```
 
+# Saving peak score and ssgsea data
 ```{r}
-drg128_gene_list <- merge(drg128_gene_list, 
-                      as.data.frame((rna_dat_supervised@elementMetadata)[which(rna_dat_supervised@elementMetadata$all.ppcg.trans %in% drg128_gene_list$ENSG),]), 
-                      by.x = "ENSG", by.y = "all.ppcg.trans",
-                      all.x = TRUE)
-```
-
-```{r}
-drg128_genes_for_testing <- rna_dat_k10[unique(drg128_gene_list$hgnc_symbol[!is.na(drg128_gene_list$hgnc_symbol)]),
-                                        hypoxia_signatures_tum_data_single$PPCG_RNA_Assay_ID]
+write.csv(ssgsea_hallmark_hypoxia[,c("Buffa_signature_Sum_within",
+                                     "Peak1_average",
+                                     "Peak2_average")],
+          file = paste0(supp_fig_data_outdir,"Supplementary_figure_12_peak_data.csv"), row.names = FALSE)
 ```
 
 
-## Test for differences in scores
-```{r}
-drg128_q1q4_stats <- as.data.frame(matrix(nrow = nrow(drg128_genes_for_testing), ncol = 3))
-colnames(drg128_q1q4_stats) <- c("Gene","wilcox_p_val","wilcox_p_adj")
-drg128_q1q4_stats$Gene <- rownames(drg128_genes_for_testing)
 
-for(i in 1:nrow(drg128_q1q4_stats)){
-  gene <- drg128_q1q4_stats$Gene[i]
-  test_gene <- as.data.frame(t(drg128_genes_for_testing)[,gene])
-  colnames(test_gene) <-"Test_gene"
-  test_gene$sample <- rownames(test_gene)
-  
-  test_data <- merge(test_gene, hypoxia_signatures_tum_data_single[,c("Buffa_signature_Sum_within_quartile_extended",
-                                                                      "PPCG_RNA_Assay_ID")],
-                     by.x = "sample", by.y = "PPCG_RNA_Assay_ID")
-  
-  drg128_q1q4_stats$wilcox_p_val[i] <- wilcox.test(subset(test_data, Buffa_signature_Sum_within_quartile_extended == "Q1")[,"Test_gene"],
-                                                   subset(test_data, Buffa_signature_Sum_within_quartile_extended == "Q4")[,"Test_gene"])[[3]]
-  
-}
-
-drg128_q1q4_stats$wilcox_p_adj <- p.adjust(drg128_q1q4_stats$wilcox_p_val, method = "BH")
-```
-
-```{r}
-drg128_q1q4_stats$Significance <- ifelse(drg128_q1q4_stats$wilcox_p_adj < 0.05, yes = "Significant", no = "N.S.")
-```
-
-```{r}
-rownames(drg128_q1q4_stats) <- drg128_q1q4_stats$Gene
-```
-
-```{r}
-dim(drg128_q1q4_stats)
-```
-
-
-## Prepare heatmap
-Order hypoxia scores
-
-```{r}
-drg128_gene_expression <- t(scale(t(as.matrix(rna_dat_k10[unique(drg128_gene_list$hgnc_symbol[!is.na(drg128_gene_list$hgnc_symbol)]),
-                                                                            hypoxia_signatures_tum_data_single$PPCG_RNA_Assay_ID]))))
-
-```
-
-```{r}
-hypoxia_signatures_tum_data_single <- hypoxia_signatures_tum_data_single[order(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within, decreasing = FALSE),]
-rownames(hypoxia_signatures_tum_data_single) <- hypoxia_signatures_tum_data_single$PPCG_RNA_Assay_ID
-```
-
-```{r}
-drg128_gene_expression <- drg128_gene_expression[,hypoxia_signatures_tum_data_single$PPCG_RNA_Assay_ID]
-```
-
-```{r}
-ha_row_annotation_hypoxia <- HeatmapAnnotation(Hypoxia = anno_barplot(hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within))
-```
-
-```{r}
-rownames(drg128_gene_expression) <- gsub(".*\\|\\|","",rownames(drg128_gene_expression))
-```
-
-```{r}
-rownames(drg128_gene_list) <- drg128_gene_list$SYMBOL
-```
-
-```{r}
-ha_row_annotation_drg <- rowAnnotation("DDR Pathway" = drg128_gene_list[rownames(drg128_gene_expression),"DDR_pathway"],
-                                       "Q1 v Q4" = drg128_q1q4_stats[rownames(drg128_gene_expression),"Significance"],
-                                        col = list("DDR Pathway" = c("BER" = "#332288", 
-                                                                      "DR" = "#88CCEE",
-                                                                      "FA" = "#44AA99",
-                                                                      "HR" = "#117733",
-                                                                      "Many" = "#999933",
-                                                                      "MMR" = "#DDCC77",
-                                                                      "NER" = "#661100",
-                                                                      "NHEJ" = "#CC6677",
-                                                                      "Other" = "#882255",
-                                                                      "TLS" = "#AA4499"),
-                                                   "Q1 v Q4" = c("Significant" = "goldenrod", "N.S." = "grey")))
-```
-
-```{r fig.height=20, fig.width=17}
-drg128_expression_heatmap <- Heatmap(drg128_gene_expression[,],
-                                        name = "Scaled DRG128 Gene expression",
-                                        top_annotation = ha_row_annotation_hypoxia,
-                                        right_annotation = ha_row_annotation_drg,
-                                        show_column_names = FALSE,
-                                        column_split = hypoxia_signatures_tum_data_single$Buffa_signature_Sum_within_quartile_extended,
-                                        row_split = drg128_gene_list[rownames(drg128_gene_expression),]$DDR_pathway,
-                                        cluster_rows = TRUE,
-                                        cluster_columns = FALSE)
-```
-
-```{r fig.height=20, fig.width=17}
-draw(drg128_expression_heatmap)
-```
 
 # Session info
 ```{r}
